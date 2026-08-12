@@ -1,0 +1,66 @@
+// ch05_01_try_patterns.glk — try/catch 模式
+// .\gltk.exe run learn\examples\ch05_01_try_patterns.glk
+
+import out
+
+fn parse_port(s) {
+  let n = int(s)
+  if n < 1 || n > 65535 {
+    throw "port out of range: " + ("" + n)
+  }
+  return n
+}
+
+fn result_ok(v) {
+  return {ok: true, value: v, error: ""}
+}
+
+fn result_err(msg) {
+  return {ok: false, value: null, error: msg}
+}
+
+fn safe_parse_port(s) {
+  try {
+    return result_ok(parse_port(s))
+  } catch e {
+    return result_err(e)
+  }
+}
+
+fn main(args) {
+  // 1) 基本
+  try {
+    throw "simple"
+  } catch e {
+    out.println("caught:", e)
+  }
+
+  // 2) 校验函数 + 外层 catch
+  try {
+    out.println(parse_port("8080"))
+    parse_port("99999")
+  } catch e {
+    out.println("parse_port error:", e)
+  }
+
+  // 3) Result 风格（不抛到 main）
+  let r1 = safe_parse_port("443")
+  let r2 = safe_parse_port("0")
+  out.println("r1 ok=", r1.ok, " value=", r1.value)
+  out.println("r2 ok=", r2.ok, " error=", r2.error)
+
+  // 4) 多层：内层处理或再抛
+  try {
+    try {
+      throw "inner"
+    } catch e {
+      out.println("inner catch:", e)
+      throw "rethrow:" + e
+    }
+  } catch e2 {
+    out.println("outer catch:", e2)
+  }
+
+  out.println("done")
+  return 0
+}

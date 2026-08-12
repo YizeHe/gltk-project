@@ -1,0 +1,403 @@
+// testfile_re_one.glk — reverse ONE sample pure GLTK; write to <outdir>/REPORT.md
+// Usage:
+//   gltk run samples/testfile_re_one.glk -- <sample_path> <out_dir>
+//
+// Handles: PE (NSIS/7z/RAR/Electron/AHK), MSI, large files via pe.summary.
+// No Python. Uses to_str (import str shadows free str).
+
+import pe, fs, out, str, file, msi, crypto, archive, asar, js, re, json, http, ahk, strings_re, bin, ahpk2, dotnet
+
+fn L(s, x) {
+  return s + to_str(x) + "\n"
+}
+
+fn markers_join(info) {
+  let m = ""
+  if typeof(info.markers) != "array" {
+    return m
+  }
+  let i = 0
+  while i < len(info.markers) {
+    if i > 0 { m = m + ", " }
+    m = m + info.markers[i]
+    i = i + 1
+  }
+  return m
+}
+
+fn pe_kind(m) {
+  if str.contains(m, "Nullsoft") { return "nsis" }
+  if str.contains(m, "Inno") { return "inno" }
+  if str.contains(m, "Electron") || str.contains(m, "app.asar") { return "electron" }
+  if str.contains(m, "WinRAR") || str.contains(m, "Rar!") { return "rar" }
+  if str.contains(m, "bat2exe") || str.contains(m, "!@Install@") { return "7zsfx" }
+  if str.contains(m, "AutoHotkey") || str.contains(m, "ScriptGuard") { return "ahk" }
+  if str.contains(m, "7z") { return "7z" }
+  return "pe"
+}
+
+fn main(args) {
+  if len(args) < 2 {
+    out.println("usage: testfile_re_one.glk -- <sample> <out_dir>")
+    return 1
+  }
+  let sample = args[0]
+  let outDir = args[1]
+  out.println("=== RE one ===", sample, "->", outDir)
+  if !fs.exists(sample) {
+    out.println("missing sample")
+    return 2
+  }
+  fs.mkdir_all(outDir)
+
+  let report = "# Reverse Report (pure GLTK)\n\n"
+  report = L(report, "Sample: `" + sample + "`")
+  report = L(report, "Out: `" + outDir + "`")
+  report = L(report, "")
+
+  let fsize = fs.file_size(sample)
+  report = L(report, "## File")
+  report = L(report, "- size: " + to_str(fsize))
+
+  let head = fs.head(sample, 4096)
+  let magic = crypto.hex_encode(bin.slice(head, 0, 16))
+  report = L(report, "- magic: `" + magic + "`")
+  out.println("size", fsize, "magic", magic)
+
+  // MSI / CFB
+  if str.starts_with(magic, "d0cf11e0") || str.ends_with(str.lower(sample), ".msi") {
+    out.println("--- MSI path ---")
+    report = L(report, "## Format: MSI / OLE CFB")
+    let mi = msi.info(sample)
+    if typeof(mi) == "map" && mi.ok {
+      report = L(report, "- likely_msi: " + to_str(mi.likely_msi))
+      report = L(report, "- stream_count: " + to_str(mi.stream_count))
+      report = L(report, "- sector_size: " + to_str(mi.sector_size))
+      if typeof(mi.stream_names) == "array" {
+        report = L(report, "### Streams (cap 40)")
+        let i = 0
+        let lim = len(mi.stream_names)
+        if lim > 40 { lim = 40 }
+        while i < lim {
+          report = L(report, "- `" + mi.stream_names[i] + "`")
+          i = i + 1
+        }
+      }
+    }
+    let hits = str.scan(fs.head(sample, 2097152), 5, 200)
+    report = L(report, "### Interesting strings")
+    let i = 0
+    let shown = 0
+    while i < len(hits) && shown < 30 {
+      let t = hits[i].text
+      if str.contains(t, "KeePass") || str.contains(t, "Product") || str.contains(t, "Version") || str.contains(t, "http") || str.contains(t, "Copyright") || str.contains(t, "Publisher") || str.contains(t, "XC") || str.contains(t, "Install") {
+        report = L(report, "- " + t)
+        shown = shown + 1
+      }
+      i = i + 1
+    }
+    report = L(report, "### Conclusion")
+    report = L(report, "Windows Installer package. Product strings recoverable from streams/header. Full CAB extract needs msiexec admin or dark/lessmsi (not run here).")
+    fs.write_text(outDir + "\\REPORT.md", report)
+    out.println("WROTE", outDir + "\\REPORT.md")
+    return 0
+  }
+
+  // PE path
+  if !str.starts_with(magic, "4d5a") {
+    report = L(report, "## Format: unknown (not MZ/MSI)")
+    let st = strings_re.extract(head, 5)
+    let i = 0
+    while i < len(st) && i < 20 {
+      report = L(report, "- " + st[i].value)
+      i = i + 1
+    }
+    fs.write_text(outDir + "\\REPORT.md", report)
+    return 0
+  }
+
+  report = L(report, "## Format: PE")
+  let info = pe.summary(sample)
+  report = L(report, "- machine: " + to_str(info.machine))
+  report = L(report, "- image_end: " + to_str(info.image_end))
+  report = L(report, "- overlay_size: " + to_str(info.overlay_size))
+  let mk = markers_join(info)
+  report = L(report, "- markers: " + mk)
+  out.println("overlay", info.overlay_size, "markers", mk)
+
+  let kind = pe_kind(mk)
+  // 7z SFX marker in overlay head
+  if info.overlay_size > 0 {
+    let ov = fs.read_range(sample, info.image_end, 65536)
+    if bin.find_bytes(ov, crypto.hex_decode("3b2140496e7374616c6c40215554462d3821")) >= 0 {
+      kind = "7zsfx"
+    }
+    if bin.find_bytes(ov, crypto.hex_decode("52617221")) >= 0 {
+      kind = "rar"
+    }
+    let ovStr = strings_re.extract(ov, 6)
+    report = L(report, "### Overlay head strings (cap 25)")
+    let oi = 0
+    while oi < len(ovStr) && oi < 25 {
+      report = L(report, "- " + ovStr[oi].value)
+      oi = oi + 1
+    }
+  }
+  report = L(report, "- classified: **" + kind + "**")
+  out.println("kind", kind)
+
+  // CLR / AHPK2 quick
+  if dotnet.is_clr(sample) {
+    report = L(report, "### .NET")
+    let ds = dotnet.summary(sample)
+    report = L(report, "- is_clr: true ilonly=" + to_str(ds.ilonly))
+    if typeof(ds.interesting_strings) == "array" {
+      let i = 0
+      while i < len(ds.interesting_strings) && i < 15 {
+        report = L(report, "- US: `" + ds.interesting_strings[i] + "`")
+        i = i + 1
+      }
+    }
+  }
+  let ad = ahpk2.detect(sample)
+  if typeof(ad) == "map" && ad.ok {
+    report = L(report, "### AHPK2")
+    report = L(report, "- payload_size: " + to_str(ad.payload_size))
+  }
+
+  // Extract when installer/sfx
+  let extractDir = outDir + "\\extract"
+  let didExtract = false
+  if kind == "nsis" || kind == "7zsfx" || kind == "7z" || kind == "rar" || kind == "electron" || info.overlay_size > 500000 {
+    out.println("--- archive.extract ---")
+    fs.mkdir_all(extractDir)
+    let er = archive.extract(sample, extractDir)
+    report = L(report, "## Unpack (archive.extract / 7za)")
+    report = L(report, "- ok: " + to_str(er.ok))
+    report = L(report, "- exit: " + to_str(er.exit))
+    if typeof(er.error) == "str" && er.error != "" {
+      report = L(report, "- error: " + er.error)
+    }
+    if er.ok {
+      didExtract = true
+      let ents = fs.list_dir(extractDir)
+      report = L(report, "### Top-level entries")
+      let i = 0
+      let lim = len(ents)
+      if lim > 40 { lim = 40 }
+      while i < lim {
+        report = L(report, "- `" + ents[i] + "`")
+        i = i + 1
+      }
+    }
+  }
+
+  // Electron asar deep
+  let asarPath = extractDir + "\\resources\\app.asar"
+  if didExtract && fs.exists(asarPath) {
+    out.println("--- asar ---")
+    let asarOut = outDir + "\\asar"
+    fs.mkdir_all(asarOut)
+    let asz = fs.file_size(asarPath)
+    report = L(report, "## app.asar")
+    report = L(report, "- size: " + to_str(asz))
+    let ai = asar.info(asarPath)
+    if typeof(ai) == "map" {
+      report = L(report, "- info ok: " + to_str(ai.ok) + " file_count: " + to_str(ai.file_count))
+      if typeof(ai.error) == "str" && ai.error != "" {
+        report = L(report, "- info error: " + ai.error)
+      }
+    }
+    // Large asars: read key files only (avoid multi-hundred-MB extract)
+    if asz > 100000000 {
+      out.println("large asar -> selective read")
+      report = L(report, "- mode: selective asar.read (size > 100MB)")
+      let cands = ["package.json", "dist/electron/main.js", "dist/main/main.js", "main.js", "dist/main/index.js"]
+      let ci = 0
+      while ci < len(cands) {
+        let inner = cands[ci]
+        let blob = asar.read(asarPath, inner)
+        if typeof(blob) == "bytes" && len(blob) > 0 {
+          let dest = asarOut + "\\" + str.replace(inner, "/", "\\")
+          // ensure parent via write after mkdir of asarOut only — nested paths may need mkdir
+          fs.mkdir_all(asarOut + "\\dist\\electron")
+          fs.mkdir_all(asarOut + "\\dist\\main")
+          fs.write_bytes(dest, blob)
+          report = L(report, "- read `" + inner + "` -> " + to_str(len(blob)) + " bytes")
+          if str.ends_with(inner, "package.json") || str.ends_with(inner, ".json") {
+            report = L(report, "```json")
+            report = L(report, str.from_utf8(blob))
+            report = L(report, "```")
+          }
+          if str.ends_with(inner, ".js") {
+            let mt = str.from_utf8(blob)
+            let scan = js.scan_file(dest)
+            if typeof(scan) == "map" && typeof(scan.urls) == "array" {
+              let ui = 0
+              while ui < len(scan.urls) && ui < 15 {
+                report = L(report, "- url: `" + scan.urls[ui] + "`")
+                ui = ui + 1
+              }
+            }
+            let urls = re.find_all("https://[a-zA-Z0-9._\\-/:]+", mt)
+            let seen = ""
+            let ui = 0
+            let n = 0
+            while ui < len(urls) && n < 12 {
+              let u = urls[ui]
+              if !str.contains(seen, u) {
+                seen = seen + "|" + u
+                report = L(report, "- `" + u + "`")
+                n = n + 1
+              }
+              ui = ui + 1
+            }
+          }
+        }
+        ci = ci + 1
+      }
+    } else {
+      let ar = asar.extract(asarPath, asarOut)
+      if typeof(ar) != "map" {
+        report = L(report, "- extract: failed (null)")
+      } else {
+        report = L(report, "- extract ok: " + to_str(ar.ok) + " count: " + to_str(ar.count))
+        if typeof(ar.error) == "str" && ar.error != "" {
+          report = L(report, "- error: " + ar.error)
+        }
+        if ar.ok {
+          let pkg = asarOut + "\\package.json"
+          if fs.exists(pkg) {
+            report = L(report, "### package.json")
+            report = L(report, "```json")
+            report = L(report, fs.read_text(pkg))
+            report = L(report, "```")
+          }
+          let mainJs = asarOut + "\\dist\\electron\\main.js"
+          if !fs.exists(mainJs) {
+            if fs.exists(asarOut + "\\main.js") { mainJs = asarOut + "\\main.js" }
+            if fs.exists(asarOut + "\\dist\\main\\main.js") { mainJs = asarOut + "\\dist\\main\\main.js" }
+          }
+          if fs.exists(mainJs) {
+            report = L(report, "### main.js secrets")
+            report = L(report, "- path size=" + to_str(fs.file_size(mainJs)))
+            let scan = js.scan_file(mainJs)
+            if typeof(scan) == "map" && typeof(scan.urls) == "array" {
+              let ui = 0
+              while ui < len(scan.urls) && ui < 20 {
+                report = L(report, "- url: `" + scan.urls[ui] + "`")
+                ui = ui + 1
+              }
+            }
+            let mt = fs.read_text(mainJs)
+            if str.contains(mt, "5f5749e77a9b") {
+              report = L(report, "- **HMAC key**: `5f5749e77a9b`")
+            }
+            let urls = re.find_all("https://[a-zA-Z0-9._\\-/:]+", mt)
+            let seen = ""
+            let ui = 0
+            let n = 0
+            while ui < len(urls) && n < 15 {
+              let u = urls[ui]
+              if !str.contains(seen, u) {
+                seen = seen + "|" + u
+                report = L(report, "- `" + u + "`")
+                n = n + 1
+              }
+              ui = ui + 1
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // bat2exe / 7z: look for .cmd .bat after extract
+  if didExtract && (kind == "7zsfx" || kind == "7z") {
+    report = L(report, "## 7z SFX / bat2exe notes")
+    let ents = fs.list_dir(extractDir)
+    let i = 0
+    while i < len(ents) {
+      let e = ents[i]
+      let low = str.lower(e)
+      if str.ends_with(low, ".cmd") || str.ends_with(low, ".bat") || str.ends_with(low, ".ps1") || str.ends_with(low, ".vbs") {
+        report = L(report, "- script entry: `" + e + "`")
+        let p = extractDir + "\\" + e
+        if fs.exists(p) && fs.file_size(p) < 200000 {
+          report = L(report, "```")
+          report = L(report, fs.read_text(p))
+          report = L(report, "```")
+        }
+      }
+      i = i + 1
+    }
+  }
+
+  // AHK resources
+  if kind == "ahk" || str.contains(mk, "ScriptGuard") || str.contains(mk, "AutoHotkey") {
+    out.println("--- AHK resources ---")
+    report = L(report, "## AutoHotkey / ScriptGuard")
+    let data = fs.read_bytes(sample)
+    // light parse may skip data — full for small files
+    let pei = pe.parse(data, false)
+    if typeof(pei.resources) == "array" {
+      let i = 0
+      while i < len(pei.resources) {
+        let r = pei.resources[i]
+        let t = to_str(r.type)
+        let n = to_str(r.name)
+        if t == "RCDATA" && typeof(r.data) == "bytes" {
+          let rpath = outDir + "\\RCDATA_" + n + ".bin"
+          fs.write_bytes(rpath, r.data)
+          report = L(report, "- saved RCDATA `" + n + "` size=" + to_str(len(r.data)))
+          if ahk.is_scriptguard2(rpath) {
+            let dr = ahk.decrypt_rcdata(rpath, outDir + "\\script_decrypted.ahk")
+            report = L(report, "- ScriptGuard2 decrypt ok=" + to_str(dr.ok) + " script_len=" + to_str(dr.script_len))
+          }
+        }
+        i = i + 1
+      }
+    }
+  }
+
+  // PE imports light for small files
+  if fsize < 20000000 {
+    let imps = pe.imports(sample)
+    if typeof(imps) == "array" {
+      report = L(report, "### Imports (cap 30)")
+      let i = 0
+      while i < len(imps) && i < 30 {
+        report = L(report, "- " + to_str(imps[i]))
+        i = i + 1
+      }
+    }
+  }
+
+  report = L(report, "")
+  report = L(report, "## Conclusion")
+  if kind == "nsis" {
+    report = L(report, "NSIS installer/SFX. Unpacked with 7za when possible; check extract/ for payload (Electron/app.asar common).")
+  }
+  if kind == "7zsfx" {
+    report = L(report, "7-Zip SFX (bat2exe-style). Extracted embedded archive; look for .cmd/.bat payload.")
+  }
+  if kind == "rar" {
+    report = L(report, "WinRAR-related PE/SFX. Marker Rar! in overlay/body; payload may need rar extract.")
+  }
+  if kind == "electron" {
+    report = L(report, "Electron packaging; app.asar holds JS app logic.")
+  }
+  if kind == "ahk" {
+    report = L(report, "AutoHotkey compiled binary; ScriptGuard decrypt attempted when RCDATA present.")
+  }
+  if kind == "pe" {
+    report = L(report, "Generic PE; see markers/imports/overlay.")
+  }
+  report = L(report, "")
+  report = L(report, "Generated by pure GLTK `samples/testfile_re_one.glk` — no Python.")
+
+  fs.write_text(outDir + "\\REPORT.md", report)
+  out.println("WROTE", outDir + "\\REPORT.md")
+  out.println("=== done ===", sample)
+  return 0
+}

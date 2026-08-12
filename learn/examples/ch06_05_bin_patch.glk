@@ -1,0 +1,38 @@
+// ch06_05_bin_patch.glk — bin 修改：write_at / fill / swap / concat
+// .\gltk.exe run learn\examples\ch06_05_bin_patch.glk
+
+import out, bin, fs
+
+fn main(args) {
+  let dir = "learn/examples/_tmp_ch06"
+  fs.mkdir_all(dir)
+
+  let base = bin.from_u32le([0x11223344, 0x55667788])
+  out.println("base len", bin.len(base))
+  out.println("u32le0", bin.u32le(base, 0), "u32le4", bin.u32le(base, 4))
+
+  // write_at：在偏移写补丁
+  let patch = bin.from_u32le([0xAABBCCDD])
+  let p2 = bin.write_at(base, 4, patch)
+  out.println("after write_at@4 u32le4=", bin.u32le(p2, 4))
+
+  // fill
+  let filled = bin.fill(p2, 0, 2, 0x90)
+  out.println("after fill nop-ish u8.0=", bin.u8(filled, 0), "u8.1=", bin.u8(filled, 1))
+
+  // swap16 / swap32
+  let s16 = bin.swap16(bin.from_u32le([0x01020304]))
+  out.println("swap16 demo len", bin.len(s16))
+
+  // rol/ror
+  out.println("rol32(1,4)=", bin.rol32(1, 4))
+  out.println("ror32(16,2)=", bin.ror32(16, 2))
+
+  // 落盘
+  let outp = dir + "/patched.bin"
+  fs.write_bytes(outp, filled)
+  out.println("wrote", outp, "size", fs.file_size(outp))
+  out.println("crc32", bin.crc32(filled))
+
+  return 0
+}

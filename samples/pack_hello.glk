@@ -1,0 +1,26 @@
+// pack_hello.glk — test program for gltk pack → standalone exe
+import out, str, crypto
+
+fn greet(name) {
+  return "Hello, " + name + " from packed GLVM!"
+}
+
+fn main(args) {
+  out.println("=== pack_hello ===")
+  let who = "world"
+  if len(args) >= 1 {
+    who = args[0]
+  }
+  out.println(greet(who))
+  let h = crypto.sha256_hex("gltk-pack-test")
+  out.println("sha256:", h)
+  let n = 0
+  let i = 0
+  while i < 1000 {
+    n = n + i
+    i = i + 1
+  }
+  out.println("sum0_999=", n)
+  out.println("ok")
+  return 0
+}

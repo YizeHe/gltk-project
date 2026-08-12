@@ -1,0 +1,23 @@
+// re_demo.glk — regex stdlib demo
+import re, out, str
+
+fn main(args) {
+    let text = "contact: alice@test.com or bob@ssgreen.org path=/wes uuid=5f5749e77a9b"
+    out.println("match email?", re.match("[a-z]+@[a-z.]+", text))
+    let f = re.find("([a-z]+)@([a-z.]+)", text)
+    out.println("find ok=", f.ok, " match=", f.match, " at", f.start)
+    let all = re.find_all("[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}", text)
+    out.println("emails count", len(all))
+    let i = 0
+    while i < len(all) {
+        out.println("  ", all[i])
+        i = i + 1
+    }
+    let g = re.groups("uuid=([a-f0-9]+)", text)
+    out.println("groups", g[0], g[1])
+    let rep = re.replace("@", text, " AT ", 1)
+    out.println("replace1", rep)
+    let parts = re.split("\\s+or\\s+", text)
+    out.println("split0", parts[0])
+    return 0
+}

@@ -1,0 +1,222 @@
+// clash_gui.glk — free proxy GUI (node hardcoded as string literals)
+// Usage:
+//   gltk run samples/clash_gui.glk
+//   gltk-proxy-gui.exe
+//
+// NOTE: do NOT put variables inside map { } literals (they become null).
+
+import clash, out, gui, http, json
+
+let g_cfg = null
+let g_status = null
+let g_quota = null
+let g_log = null
+let g_started = false
+
+fn is_handle(h) {
+  return typeof(h) == "map"
+}
+
+fn builtin_cfg() {
+  return {
+    "socks-port": 10808,
+    "proxies": [
+      {
+        "name": "cf-vless-free",
+        "type": "vless",
+        "server": "test-vless-lite.forbiddenx.top",
+        "port": 443,
+        "uuid": "fbe54028-dc5e-4799-97a1-c6e58ea5b9c7",
+        "tls": true,
+        "servername": "test-vless-lite.forbiddenx.top",
+        "network": "ws",
+        "skip-cert-verify": true,
+        "ws-opts": {
+          "path": "/gltk-vless",
+          "headers": {
+            "Host": "test-vless-lite.forbiddenx.top"
+          }
+        }
+      }
+    ]
+  }
+}
+
+fn log_line(msg) {
+  out.println(msg)
+  if is_handle(g_log) {
+    gui.append_text(g_log, msg + "\n")
+  }
+}
+
+fn set_status(msg) {
+  if is_handle(g_status) {
+    gui.set_text(g_status, msg)
+  }
+}
+
+fn set_quota(msg) {
+  if is_handle(g_quota) {
+    gui.set_text(g_quota, msg)
+  }
+}
+
+fn refresh_status() {
+  let s = clash.status()
+  let line = "proxy: "
+  if s.running {
+    line = line + "ON  SOCKS5 127.0.0.1:" + ("" + s.port)
+    line = line + "  conn=" + ("" + s.conns)
+    line = line + "  up=" + ("" + s.bytes_up)
+    line = line + "  dn=" + ("" + s.bytes_down)
+  } else {
+    line = line + "OFF"
+  }
+  if s.last_error != "" {
+    line = line + "  |  " + s.last_error
+  }
+  set_status(line)
+}
+
+fn on_start() {
+  // Immediate UI feedback (never block on HTTP first)
+  log_line("[Start] clicked")
+  set_status("proxy: starting...")
+
+  if g_started {
+    log_line("already started (flag)")
+    set_status("proxy: already ON")
+    gui.msgbox("Already running.\nClick Stop first.", "Start")
+    return
+  }
+
+  // if previous instance still listening
+  let st = clash.status()
+  if st.running {
+    log_line("clash already running — stop first")
+    g_started = true
+    refresh_status()
+    gui.msgbox("Proxy already running on port " + ("" + st.port), "Start")
+    return
+  }
+
+  g_cfg = builtin_cfg()
+  log_line("[Start] calling clash.start ...")
+
+  let sr = clash.start(g_cfg)
+  if !sr.ok {
+    log_line("[Start] FAIL: " + sr.error)
+    set_status("proxy: FAIL")
+    gui.msgbox(sr.error, "start failed")
+    return
+  }
+
+  g_started = true
+  log_line("[Start] OK SOCKS5 127.0.0.1:" + ("" + sr.port))
+  log_line("  node: test-vless-lite.forbiddenx.top/gltk-vless")
+  log_line("  test: curl.exe -x socks5h://127.0.0.1:" + ("" + sr.port) + " https://httpbin.org/ip")
+  refresh_status()
+  gui.msgbox("Started!\nSOCKS5 127.0.0.1:" + ("" + sr.port), "Start OK")
+}
+
+fn on_stop() {
+  log_line("[Stop] clicked")
+  let st = clash.stop()
+  g_started = false
+  log_line("[Stop] ok=" + ("" + st.ok) + " " + st.error)
+  refresh_status()
+  set_status("proxy: OFF")
+  gui.msgbox("Stopped", "Stop")
+}
+
+fn on_quota() {
+  log_line("[Quota] checking...")
+  set_quota("quota: checking...")
+  let url = "https://test-vless-lite.forbiddenx.top/api/quota"
+  let r = http.get(url, { timeout: 8, insecure: true })
+  if !r.ok {
+    set_quota("quota fail: " + r.error)
+    log_line("quota fail: " + r.error)
+    gui.msgbox("Quota request failed:\n" + r.error, "Quota")
+    return
+  }
+  let j = json.parse(r.body)
+  if typeof(j) != "map" {
+    set_quota("quota: bad response")
+    gui.msgbox("bad quota response", "Quota")
+    return
+  }
+  if j.exhausted {
+    set_quota(j.message)
+    log_line(j.message)
+    gui.msgbox(j.message, "quota used up")
+  } else {
+    set_quota(j.message + "  IP=" + j.ip)
+    log_line("quota: " + j.message)
+    gui.msgbox(j.message, "Quota")
+  }
+  refresh_status()
+}
+
+fn on_help() {
+  gui.msgbox("GLTK Free Proxy\n\nHost: test-vless-lite.forbiddenx.top\nPath: /gltk-vless\nSOCKS5: 127.0.0.1:10808\n\n5 min free / IP / day.\nUsed up message:\n您今日的代理免费额度已经用完了，请明天再试。", "Help")
+}
+
+fn on_quit() {
+  clash.stop()
+  g_started = false
+  gui.quit()
+}
+
+fn main(args) {
+  out.println("clash", clash.version())
+  out.println("node: test-vless-lite.forbiddenx.top/gltk-vless")
+
+  if !gui.available() {
+    out.println("GUI not available")
+    return 1
+  }
+
+  // prepare config only — do NOT listen before UI
+  g_cfg = builtin_cfg()
+  out.println("cfg ready")
+
+  gui.init()
+  let w = gui.window("GLTK Free Proxy", 560, 420)
+  if !is_handle(w) {
+    out.println("window create failed")
+    return 1
+  }
+
+  gui.label(w, "GLTK Free Proxy | test-vless-lite.forbiddenx.top", 16, 12, 520, 24)
+  g_status = gui.label(w, "proxy: OFF", 16, 44, 520, 24)
+  g_quota = gui.label(w, "quota: click Quota", 16, 72, 520, 24)
+
+  let b1 = gui.button(w, "Start", 16, 110, 100, 36)
+  let b2 = gui.button(w, "Stop", 126, 110, 100, 36)
+  let b3 = gui.button(w, "Quota", 236, 110, 100, 36)
+  let b4 = gui.button(w, "Help", 346, 110, 80, 36)
+  let b5 = gui.button(w, "Quit", 436, 110, 80, 36)
+
+  g_log = gui.textedit(w, 16, 160, 520, 230)
+  if is_handle(g_log) {
+    gui.set_text(g_log, "Ready.\nClick Start to open local SOCKS5 :10808\nNode is hardcoded.\n")
+  }
+
+  if !is_handle(b1) || !is_handle(b2) {
+    out.println("button create failed")
+    return 1
+  }
+
+  gui.on_click(b1, on_start)
+  gui.on_click(b2, on_stop)
+  gui.on_click(b3, on_quota)
+  gui.on_click(b4, on_help)
+  gui.on_click(b5, on_quit)
+
+  gui.show(w)
+  out.println("window shown — click Start")
+  gui.run()
+  clash.stop()
+  return 0
+}

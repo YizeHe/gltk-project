@@ -1,0 +1,268 @@
+// gh_re.glk — reverse testfile/GH.exe with pure GLTK (no Python)
+// GH.exe = GreenHub 2.2.0 NSIS + Electron + app.asar
+//
+// Usage (from gltk/):
+//   .\gltk.exe run samples\gh_re.glk
+//   .\gltk.exe run samples\gh_re.glk -- "testfile\GH.exe" work\gh
+
+import pe, fs, out, str, js, json, crypto, http, re, archive, asar
+
+fn push(s, line) {
+  // use to_str (not str) — `import str` shadows free str() with the module map
+  return to_str(s) + to_str(line) + "\n"
+}
+
+fn main(args) {
+  let sample = "testfile\\GH.exe"
+  let work = "work\\gh"
+  if len(args) >= 1 { sample = args[0] }
+  if len(args) >= 2 { work = args[1] }
+
+  let report = "# GH.exe reverse (pure GLTK, no Python)\n\n"
+  report = push(report, "Sample: `" + sample + "`")
+  report = push(report, "")
+
+  if !fs.exists(sample) {
+    out.println("ERROR missing sample")
+    return 1
+  }
+
+  out.println("=== 1 PE triage ===")
+  let s = pe.summary(sample)
+  report = push(report, "## PE")
+  report = push(report, "- size: " + ("" + s.size))
+  report = push(report, "- image_end: " + ("" + s.image_end))
+  report = push(report, "- overlay_size: " + ("" + s.overlay_size))
+  let markers = ""
+  if typeof(s.markers) == "array" {
+    let i = 0
+    while i < len(s.markers) {
+      if i > 0 { markers = markers + ", " }
+      markers = markers + s.markers[i]
+      i = i + 1
+    }
+  }
+  report = push(report, "- markers: " + markers)
+  out.println("size", s.size, "overlay", s.overlay_size, "markers", markers)
+
+  let installer = work + "\\extract"
+  let asarPath = installer + "\\resources\\app.asar"
+  let appOut = work + "\\asar"
+
+  if !fs.exists(asarPath) {
+    out.println("=== 2 NSIS extract (archive.extract) ===")
+    fs.mkdir_all(installer)
+    let er = archive.extract(sample, installer)
+    out.println("ok", er.ok, "exit", er.exit)
+    report = push(report, "## NSIS: ok=" + er.ok)
+    if !er.ok {
+      report = push(report, "- error: " + er.error)
+      fs.write_text(work + "\\REPORT_GLTK.md", report)
+      return 2
+    }
+  } else {
+    out.println("=== 2 reuse NSIS extract ===")
+    report = push(report, "## NSIS: reused existing extract")
+  }
+
+  if !fs.exists(appOut + "\\package.json") {
+    out.println("=== 3 asar.extract ===")
+    fs.mkdir_all(appOut)
+    let ar = asar.extract(asarPath, appOut)
+    out.println("ok", ar.ok, "count", ar.count)
+    report = push(report, "## asar: ok=" + ar.ok + " files=" + ar.count)
+  } else {
+    out.println("=== 3 reuse asar ===")
+    report = push(report, "## asar: reused")
+  }
+
+  let pkgPath = appOut + "\\package.json"
+  let pkgText = fs.read_text(pkgPath)
+  out.println("package.json", pkgText)
+  report = push(report, "## package.json")
+  report = push(report, "```json")
+  report = push(report, pkgText)
+  report = push(report, "```")
+
+  let mainJs = appOut + "\\dist\\electron\\main.js"
+  let rendJs = appOut + "\\dist\\electron\\renderer.js"
+  report = push(report, "## Application logic")
+  report = push(report, "- main: `" + mainJs + "` size=" + fs.file_size(mainJs))
+  if fs.exists(rendJs) {
+    report = push(report, "- renderer: `" + rendJs + "` size=" + fs.file_size(rendJs))
+  }
+
+  out.println("=== 4 secrets from main.js ===")
+  let text = fs.read_text(mainJs)
+  let scan = js.scan_file(mainJs)
+  report = push(report, "### js.scan_file URLs")
+  if typeof(scan) == "map" && typeof(scan.urls) == "array" {
+    let i = 0
+    while i < len(scan.urls) {
+      out.println("url", scan.urls[i])
+      report = push(report, "- `" + scan.urls[i] + "`")
+      i = i + 1
+    }
+  }
+
+  // HMAC
+  let hmacKey = "5f5749e77a9b"
+  if str.contains(text, hmacKey) {
+    out.println("HMAC key FOUND", hmacKey)
+    report = push(report, "### Crypto")
+    report = push(report, "- **HMAC-SHA256 key**: `" + hmacKey + "`")
+    report = push(report, "- sign: `createHmac('sha256', key).update(sortedQuery).digest('base64')`")
+    let ts = crypto.now_ms()
+    let params = {timestamp: "" + ts, uid: "0", version: "2.2.0"}
+    let signed = crypto.sign_query(hmacKey, params)
+    report = push(report, "- demo msg: `" + signed.msg + "`")
+    report = push(report, "- demo sign: `" + signed.sign + "`")
+    out.println("sign", signed.sign)
+  }
+
+  report = push(report, "### API paths (from main.js)")
+  report = push(report, "- `/d/v1/status?uid=&version=&platform=`")
+  report = push(report, "- `/d/v1/account?` + signed query (per node domain)")
+  report = push(report, "- CDN list: CloudFront `.../v1/server_list_v7.json`")
+  report = push(report, "- CDN config: `.../v1/config_v2.json` or `config.json`")
+
+  // keywords
+  report = push(report, "### keywords present")
+  let kws = ["VMess", "vmess", "account", "sign", "cloudfront", "greenhub", "stripe"]
+  let ki = 0
+  while ki < len(kws) {
+    if str.contains(str.lower(text), str.lower(kws[ki])) {
+      report = push(report, "- `" + kws[ki] + "`")
+    }
+    ki = ki + 1
+  }
+
+  // updater yml
+  let upd = installer + "\\resources\\app-update.yml"
+  if fs.exists(upd) {
+    let ut = fs.read_text(upd)
+    report = push(report, "## app-update.yml")
+    report = push(report, "```")
+    report = push(report, ut)
+    report = push(report, "```")
+  }
+
+  // Discover CDN base from JS
+  let cdn = "https://d3tcuovadxwee6.cloudfront.net"
+  let cfs = re.find_all("https://[a-z0-9]+\\.cloudfront\\.net", text)
+  if len(cfs) > 0 {
+    cdn = cfs[0]
+  }
+  out.println("CDN base", cdn)
+  report = push(report, "## CDN")
+  report = push(report, "- base: `" + cdn + "`")
+
+  out.println("=== 5 fetch server list + config ===")
+  report = push(report, "## Live CDN fetch")
+
+  let listURL = cdn + "/v1/server_list_v7.json"
+  let cfgURL = cdn + "/v1/config_v2.json"
+  let cfgURL2 = cdn + "/v1/config.json"
+
+  let r1 = http.get(listURL)
+  out.println("GET", listURL, "status", r1.status, "bodylen", len(r1.body))
+  report = push(report, "### " + listURL)
+  report = push(report, "- status: " + ("" + r1.status) + " body_len: " + ("" + len(r1.body)))
+  let nodeCount = 0
+  if r1.ok {
+    fs.write_text(work + "\\server_list_v7.json", r1.body)
+    let pj = json.parse(r1.body)
+    if typeof(pj) == "map" {
+      let flat = json.flatten_servers(pj)
+      if typeof(flat) == "array" {
+        nodeCount = len(flat)
+        out.println("nodes", nodeCount)
+        report = push(report, "- **flat node count**: " + ("" + nodeCount))
+        let fi = 0
+        while fi < len(flat) && fi < 8 {
+          let n = flat[fi]
+          let line = ""
+          if typeof(n) == "map" {
+            line = n.domain + " (" + n.country + " " + n.label_zh + ")"
+          } else {
+            line = "" + n
+          }
+          out.println(" node", line)
+          report = push(report, "  - `" + line + "`")
+          fi = fi + 1
+        }
+      }
+      // version field
+      if typeof(pj.version) == "str" {
+        report = push(report, "- list version field: " + pj.version)
+      }
+    }
+  } else {
+    report = push(report, "- error: " + r1.error)
+  }
+
+  let r2 = http.get(cfgURL)
+  out.println("GET", cfgURL, "status", r2.status, "len", len(r2.body))
+  report = push(report, "### " + cfgURL)
+  report = push(report, "- status: " + ("" + r2.status))
+  if r2.ok {
+    fs.write_text(work + "\\config_v2.json", r2.body)
+  } else {
+    let r3 = http.get(cfgURL2)
+    out.println("GET", cfgURL2, "status", r3.status, "len", len(r3.body))
+    report = push(report, "### " + cfgURL2)
+    report = push(report, "- status: " + ("" + r3.status) + " body_len: " + ("" + len(r3.body)))
+    if r3.ok {
+      fs.write_text(work + "\\config.json", r3.body)
+      report = push(report, "- saved config.json (homepage/ghhub links inside)")
+    }
+  }
+
+  // optional status probe on first node domain
+  if nodeCount > 0 {
+    out.println("=== 6 optional /d/v1/status probe ===")
+    let pj2 = json.parse(r1.body)
+    let flat2 = json.flatten_servers(pj2)
+    if typeof(flat2) == "array" && len(flat2) > 0 {
+      let node0 = flat2[0]
+      let host = ""
+      if typeof(node0) == "map" {
+        host = node0.domain
+      } else {
+        host = "" + node0
+      }
+      if host != "" {
+        let stURL = "https://" + host + "/d/v1/status?uid=0&version=2.2.0&platform=win32"
+        out.println("GET", stURL)
+        let rs = http.get(stURL, 15)
+        out.println("status", rs.status, "len", len(rs.body), "err", rs.error)
+        report = push(report, "### node status probe")
+        report = push(report, "- host: `" + host + "`")
+        report = push(report, "- url: `" + stURL + "`")
+        report = push(report, "- status: " + ("" + rs.status))
+        if len(rs.body) > 0 {
+          report = push(report, "- body snippet saved")
+          // hardcode path: heavy scripts can clobber locals (register reuse)
+          fs.write_text("work\\gh\\status_probe.txt", rs.body)
+        }
+      }
+    }
+  }
+
+  report = push(report, "")
+  report = push(report, "## Architecture")
+  report = push(report, "GH.exe = NSIS SFX (~91MB) -> GreenHub.exe + Electron + app.asar (~76MB)")
+  report = push(report, "Logic: dist/electron/main.js + renderer.js; proxy helpers under libs/")
+  report = push(report, "CDN: CloudFront server_list_v7 + config; nodes: /d/v1/status and /d/v1/account (HMAC)")
+  report = push(report, "")
+  report = push(report, "## Conclusion")
+  report = push(report, "GH.exe is GreenHub 2.2.0. Reversed with pure GLTK: pe, archive, asar, js/re, crypto.sign_query, http, json.flatten_servers. No Python.")
+  report = push(report, "Artifacts under work/gh/")
+
+  fs.write_text("work\\gh\\REPORT_GLTK.md", report)
+  fs.write_text("testfile\\GH_REPORT.md", report)
+  out.println("WROTE work\\gh\\REPORT_GLTK.md")
+  out.println("WROTE testfile\\GH_REPORT.md")
+  out.println("=== done pure GLTK ===")
+  return 0
+}

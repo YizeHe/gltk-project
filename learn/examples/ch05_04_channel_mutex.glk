@@ -1,0 +1,51 @@
+// ch05_04_channel_mutex.glk — channel / mutex / waitgroup
+// .\gltk.exe run learn\examples\ch05_04_channel_mutex.glk
+
+import out, async
+
+fn producer(ch, n) {
+  let i = 0
+  while i < n {
+    async.send(ch, i)
+    i = i + 1
+  }
+  return n
+}
+
+// 顶层函数才能 spawn；不要在 main 里 fn task()
+fn wg_task(pair) {
+  // pair: {wg, id}
+  let id = pair.id
+  async.sleep(15)
+  out.println("task", id, "done")
+  async.wg_done(pair.wg)
+  return id
+}
+
+fn main(args) {
+  out.println("=== channel ===")
+  let ch = async.channel(4)
+  let fp = async.spawn(producer, [ch, 3])
+  let c0 = async.recv(ch)
+  let c1 = async.recv(ch)
+  let c2 = async.recv(ch)
+  out.println("recv", c0.value, c1.value, c2.value, "ok=", c0.ok)
+  async.await(fp)
+  async.close(ch)
+
+  out.println("=== mutex ===")
+  let mu = async.mutex()
+  async.lock(mu)
+  out.println("critical section")
+  async.unlock(mu)
+
+  out.println("=== waitgroup ===")
+  let wg = async.waitgroup()
+  async.wg_add(wg, 2)
+  async.spawn(wg_task, [{wg: wg, id: 1}])
+  async.spawn(wg_task, [{wg: wg, id: 2}])
+  async.wg_wait(wg)
+  out.println("all tasks finished")
+
+  return 0
+}

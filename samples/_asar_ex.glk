@@ -1,0 +1,9 @@
+import asar, out, fs
+fn main(args) {
+  let src = "..\\extract\\installer\\resources\\app.asar"
+  let dst = "work\\greenhub_gltk\\asar_out"
+  let r = asar.extract(src, dst)
+  out.println("extract", r.ok, r.count)
+  out.println("main exists", fs.exists(dst + "\\dist\\electron\\main.js"))
+  return 0
+}

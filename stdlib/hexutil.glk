@@ -1,0 +1,186 @@
+// hexutil.glk — hex/binary helpers for reverse engineering
+// Uses native `bin`, `re`, and `str` modules for real conversions.
+//
+// import "stdlib/hexutil.glk" as hexutil
+
+import bin, re, str
+
+// to_hex converts an integer to a lowercase hex string (no 0x prefix).
+fn to_hex(n) {
+    if n == 0 {
+        return "0"
+    }
+    let digits = "0123456789abcdef"
+    let result = ""
+    let val = n
+    // handle negative: use unsigned 64-bit two's complement
+    if val < 0 {
+        val = val + 0x10000000000000000
+    }
+    while val > 0 {
+        let d = val % 16
+        let ch = _char_at(digits, d)
+        result = ch + result
+        val = val / 16
+    }
+    return result
+}
+
+// to_hex_padded converts integer to hex with fixed width (e.g. 8 for "0000abcd").
+fn to_hex_padded(n, width) {
+    let h = to_hex(n)
+    while str.len(h) < width {
+        h = "0" + h
+    }
+    return h
+}
+
+// hex8 returns 8-char hex for 32-bit values.
+fn hex8(n) {
+    return to_hex_padded(n & 0xFFFFFFFF, 8)
+}
+
+// hex16 returns 16-char hex for 64-bit values.
+fn hex16(n) {
+    return to_hex_padded(n, 16)
+}
+
+// hex_dump produces a classic hex dump of bytes (hexdump -C style).
+// Returns string with offset, hex bytes, and ASCII sidebar.
+fn hex_dump(bytes_data) {
+    return hex_dump_offset(bytes_data, 0)
+}
+
+// hex_dump_offset produces a hex dump starting at a given base offset.
+fn hex_dump_offset(bytes_data, base_offset) {
+    let len_b = bin.len(bytes_data)
+    let result = ""
+    let off = 0
+    while off < len_b {
+        let line = to_hex_padded(base_offset + off, 8) + "  "
+        let i = 0
+        let ascii = ""
+        while i < 16 {
+            if off + i < len_b {
+                let b = bin.u8(bytes_data, off + i)
+                line = line + to_hex_padded(b, 2) + " "
+                if b >= 32 && b < 127 {
+                    ascii = ascii + _byte_to_printable(b)
+                } else {
+                    ascii = ascii + "."
+                }
+            } else {
+                line = line + "   "
+                ascii = ascii + " "
+            }
+            if i == 7 {
+                line = line + " "
+            }
+            i = i + 1
+        }
+        line = line + " |" + ascii + "|"
+        result = result + line + "\n"
+        off = off + 16
+    }
+    return result
+}
+
+// hex_dump_short produces a compact hex string of first N bytes.
+fn hex_dump_short(bytes_data, max_bytes) {
+    let len_b = bin.len(bytes_data)
+    if max_bytes > len_b {
+        max_bytes = len_b
+    }
+    let result = ""
+    let i = 0
+    while i < max_bytes {
+        let b = bin.u8(bytes_data, i)
+        result = result + to_hex_padded(b, 2)
+        if i < max_bytes - 1 {
+            result = result + " "
+        }
+        i = i + 1
+    }
+    if max_bytes < len_b {
+        result = result + " ..."
+    }
+    return result
+}
+
+// is_hex_string returns true if all chars are 0-9a-fA-F.
+fn is_hex_string(s) {
+    return re.match("^[0-9a-fA-F]+$", s)
+}
+
+// hex_to_int parses a hex string to integer.
+fn hex_to_int(s) {
+    let digits = "0123456789abcdef"
+    let val = 0
+    let i = 0
+    let slen = str.len(s)
+    while i < slen {
+        let ch = _char_at(str.lower(s), i)
+        let d = str.index_of(digits, ch)
+        if d < 0 {
+            // skip non-hex chars (e.g. 0x prefix)
+            i = i + 1
+        } else {
+            val = val * 16 + d
+            i = i + 1
+        }
+    }
+    return val
+}
+
+// bytes_to_hex converts bytes to a continuous hex string.
+fn bytes_to_hex(bytes_data) {
+    let len_b = bin.len(bytes_data)
+    let result = ""
+    let i = 0
+    while i < len_b {
+        let b = bin.u8(bytes_data, i)
+        result = result + to_hex_padded(b, 2)
+        i = i + 1
+    }
+    return result
+}
+
+// pe_dos_header_dump dumps the first 64 bytes as a DOS header table.
+fn pe_dos_header_dump(bytes_data) {
+    let result = "=== DOS Header ===\n"
+    result = result + "e_magic:    " + hex16(bin.u16le(bytes_data, 0x00)) + "\n"
+    result = result + "e_cblp:     " + hex16(bin.u16le(bytes_data, 0x02)) + "\n"
+    result = result + "e_cp:       " + hex16(bin.u16le(bytes_data, 0x04)) + "\n"
+    result = result + "e_crlc:     " + hex16(bin.u16le(bytes_data, 0x06)) + "\n"
+    result = result + "e_cparhdr:  " + hex16(bin.u16le(bytes_data, 0x08)) + "\n"
+    result = result + "e_minalloc: " + hex16(bin.u16le(bytes_data, 0x0A)) + "\n"
+    result = result + "e_maxalloc: " + hex16(bin.u16le(bytes_data, 0x0C)) + "\n"
+    result = result + "e_ss:       " + hex16(bin.u16le(bytes_data, 0x0E)) + "\n"
+    result = result + "e_sp:       " + hex16(bin.u16le(bytes_data, 0x10)) + "\n"
+    result = result + "e_csum:     " + hex16(bin.u16le(bytes_data, 0x12)) + "\n"
+    result = result + "e_ip:       " + hex16(bin.u16le(bytes_data, 0x14)) + "\n"
+    result = result + "e_cs:       " + hex16(bin.u16le(bytes_data, 0x16)) + "\n"
+    result = result + "e_lfarlc:   " + hex16(bin.u16le(bytes_data, 0x18)) + "\n"
+    result = result + "e_ovno:     " + hex16(bin.u16le(bytes_data, 0x1A)) + "\n"
+    result = result + "e_lfanew:   " + hex16(bin.u32le(bytes_data, 0x3C)) + "\n"
+    return result
+}
+
+// _char_at extracts a single char from string at index using re.
+fn _char_at(s, pos) {
+    let all = re.find_all(".", s)
+    if pos >= 0 && pos < len(all) {
+        return all[pos]
+    }
+    return ""
+}
+
+// _byte_to_printable converts a byte value to its ASCII character.
+fn _byte_to_printable(b) {
+    let printable = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    let idx = b - 32
+    if idx >= 0 && idx < str.len(printable) {
+        return _char_at(printable, idx)
+    }
+    return "."
+}

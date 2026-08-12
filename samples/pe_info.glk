@@ -1,0 +1,33 @@
+// pe_info.glk — parse a PE file from path (args[0]), print sections and RCDATA
+import pe, fs, out
+
+fn main(args) {
+  if len(args) < 1 {
+    out.println("usage: gltk run pe_info.glk -- <path-to-pe>")
+    return 1
+  }
+  let path = args[0]
+  if !fs.exists(path) {
+    out.println("file not found: " + path)
+    return 1
+  }
+  let data = fs.read_bytes(path)
+  out.println("size=" + ("" + len(data)))
+  let info = pe.parse(data)
+  out.println("machine=" + ("" + info.machine) + " entry_rva=" + ("" + info.entry))
+  let secs = info.sections
+  out.println("sections=" + ("" + len(secs)))
+  for i in range(0, len(secs)) {
+    let s = secs[i]
+    out.println("  " + s.name + " vsize=" + ("" + s.vsize) + " rawsize=" + ("" + s.rawsize) + " rawptr=" + ("" + s.rawptr))
+  }
+  let res = info.resources
+  out.println("resources=" + ("" + len(res)))
+  for i in range(0, len(res)) {
+    let r = res[i]
+    if r.type == "RCDATA" {
+      out.println("  RCDATA name=" + r.name + " size=" + ("" + r.size) + " lang=" + r.lang)
+    }
+  }
+  return 0
+}

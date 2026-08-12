@@ -1,0 +1,384 @@
+import tensor
+import out
+// GrokTorch GPT-1 V5 — Lowercase-only character model
+// d_model=192, n_layers=5, ~1.9M params, 8000 steps
+// Vocab: a-z + space + basic punctuation = ~30 chars
+// Target: readable English output
+
+fn build_vocab_lower() {
+  stoi = {}
+  itos = {}
+  idx = 0
+  stoi[" "] = idx;  itos[to_str(idx)] = " ";  idx = idx + 1
+  stoi["\n"] = idx; itos[to_str(idx)] = "\n"; idx = idx + 1
+  stoi["."] = idx;  itos[to_str(idx)] = ".";  idx = idx + 1
+  stoi[","] = idx;  itos[to_str(idx)] = ",";  idx = idx + 1
+  stoi["'"] = idx;  itos[to_str(idx)] = "'";  idx = idx + 1
+  stoi["?"] = idx;  itos[to_str(idx)] = "?";  idx = idx + 1
+  stoi["!"] = idx;  itos[to_str(idx)] = "!";  idx = idx + 1
+  stoi["-"] = idx;  itos[to_str(idx)] = "-";  idx = idx + 1
+  stoi["\""] = idx; itos[to_str(idx)] = "\""; idx = idx + 1
+  stoi[":"] = idx;  itos[to_str(idx)] = ":";  idx = idx + 1
+  stoi[";"] = idx;  itos[to_str(idx)] = ";";  idx = idx + 1
+  lowercase = "abcdefghijklmnopqrstuvwxyz"
+  i = 0
+  while i < len(lowercase) {
+    ch = lowercase[i]
+    stoi[ch] = idx
+    itos[to_str(idx)] = ch
+    idx = idx + 1
+    i = i + 1
+  }
+  stoi["?"] = idx
+  itos[to_str(idx)] = "?"
+  return {"stoi": stoi, "itos": itos, "vocab_size": idx + 1}
+}
+
+fn decode(tokens, itos) {
+  result = ""
+  i = 0
+  while i < len(tokens) {
+    k = tokens[i]
+    ks = to_str(k)
+    if has(itos, ks) {
+      result = result + itos[ks]
+    } else {
+      result = result + "?"
+    }
+    i = i + 1
+  }
+  return result
+}
+
+fn get_batch(data, batch_size, seq_len, step) {
+  n = len(data)
+  batches_x = []
+  batches_y = []
+  b = 0
+  while b < batch_size {
+    start = (step * seq_len * 7919 + b * seq_len * 6271) % (n - seq_len - 1)
+    if start < 0 {
+      start = start + n - seq_len - 1
+    }
+    x_tokens = []
+    y_tokens = []
+    i = 0
+    while i < seq_len {
+      push(x_tokens, data[start + i])
+      push(y_tokens, data[start + i + 1])
+      i = i + 1
+    }
+    push(batches_x, x_tokens)
+    push(batches_y, y_tokens)
+    b = b + 1
+  }
+  return {"x": batches_x, "y": batches_y}
+}
+
+fn gpt_init(cfg) {
+  d = cfg["d_model"]
+  v = cfg["vocab_size"]
+  ff = cfg["ff_hidden"]
+  max_seq = cfg["max_seq"]
+  n_layers = cfg["n_layers"]
+  tok_emb = tensor.mul(tensor.randn([v, d]), 0.02)
+  pos_emb = tensor.mul(tensor.randn([max_seq, d]), 0.02)
+  blocks = []
+  li = 0
+  while li < n_layers {
+    b = {
+      "ln1_g": tensor.ones([d]),
+      "ln1_b": tensor.zeros([d]),
+      "q_w": tensor.mul(tensor.randn([d, d]), 0.02),
+      "q_b": tensor.zeros([d]),
+      "k_w": tensor.mul(tensor.randn([d, d]), 0.02),
+      "k_b": tensor.zeros([d]),
+      "v_w": tensor.mul(tensor.randn([d, d]), 0.02),
+      "v_b": tensor.zeros([d]),
+      "proj_w": tensor.mul(tensor.randn([d, d]), 0.02),
+      "proj_b": tensor.zeros([d]),
+      "ln2_g": tensor.ones([d]),
+      "ln2_b": tensor.zeros([d]),
+      "ff1_w": tensor.mul(tensor.randn([ff, d]), 0.02),
+      "ff1_b": tensor.zeros([ff]),
+      "ff2_w": tensor.mul(tensor.randn([d, ff]), 0.02),
+      "ff2_b": tensor.zeros([d])
+    }
+    push(blocks, b)
+    li = li + 1
+  }
+  lnf_g = tensor.ones([d])
+  lnf_b = tensor.zeros([d])
+  head_w = tensor.mul(tensor.randn([v, d]), 0.02)
+  head_b = tensor.zeros([v])
+  return {
+    "cfg": cfg,
+    "tok_emb": tok_emb, "pos_emb": pos_emb,
+    "blocks": blocks,
+    "lnf_g": lnf_g, "lnf_b": lnf_b,
+    "head_w": head_w, "head_b": head_b
+  }
+}
+
+fn ln_forward(x, gamma, beta) {
+  mv = tensor.to_value(tensor.mean(x))
+  neg_mv = -mv
+  c = tensor.add(x, neg_mv)
+  vv = tensor.to_value(tensor.mean(tensor.mul(c, c)))
+  n = tensor.div(c, tensor.to_value(tensor.sqrt(tensor.fill([1], vv + 1e-5))))
+  return tensor.add(tensor.mul(n, gamma), beta)
+}
+
+fn gpt_forward(model, idx) {
+  seq_len = len(idx)
+  pos = range(0, seq_len)
+  te = tensor.embed_lookup(model["tok_emb"], idx)
+  pe = tensor.embed_lookup(model["pos_emb"], pos)
+  x = tensor.add(te, pe)
+  blocks = model["blocks"]
+  bi = 0
+  while bi < len(blocks) {
+    b = blocks[bi]
+    n1 = ln_forward(x, b["ln1_g"], b["ln1_b"])
+    q = tensor.add(tensor.matmul(n1, tensor.transpose(b["q_w"])), b["q_b"])
+    k = tensor.add(tensor.matmul(n1, tensor.transpose(b["k_w"])), b["k_b"])
+    v = tensor.add(tensor.matmul(n1, tensor.transpose(b["v_w"])), b["v_b"])
+    ao = tensor.scaled_dot_product_attention(q, k, v)
+    ap = tensor.add(tensor.matmul(ao, tensor.transpose(b["proj_w"])), b["proj_b"])
+    x = tensor.add(x, ap)
+    n2 = ln_forward(x, b["ln2_g"], b["ln2_b"])
+    fh = tensor.add(tensor.matmul(n2, tensor.transpose(b["ff1_w"])), b["ff1_b"])
+    fa = tensor.gelu(fh)
+    fo = tensor.add(tensor.matmul(fa, tensor.transpose(b["ff2_w"])), b["ff2_b"])
+    x = tensor.add(x, fo)
+    bi = bi + 1
+  }
+  x = ln_forward(x, model["lnf_g"], model["lnf_b"])
+  logits = tensor.add(tensor.matmul(x, tensor.transpose(model["head_w"])), model["head_b"])
+  return logits
+}
+
+fn gpt_params(model) {
+  p = []
+  push(p, model["tok_emb"])
+  push(p, model["pos_emb"])
+  bi = 0
+  while bi < len(model["blocks"]) {
+    b = model["blocks"][bi]
+    push(p, b["ln1_g"]); push(p, b["ln1_b"])
+    push(p, b["q_w"]); push(p, b["q_b"])
+    push(p, b["k_w"]); push(p, b["k_b"])
+    push(p, b["v_w"]); push(p, b["v_b"])
+    push(p, b["proj_w"]); push(p, b["proj_b"])
+    push(p, b["ln2_g"]); push(p, b["ln2_b"])
+    push(p, b["ff1_w"]); push(p, b["ff1_b"])
+    push(p, b["ff2_w"]); push(p, b["ff2_b"])
+    bi = bi + 1
+  }
+  push(p, model["lnf_g"]); push(p, model["lnf_b"])
+  push(p, model["head_w"]); push(p, model["head_b"])
+  return p
+}
+
+fn generate(model, prompt_tokens, max_new_tokens, itos, temperature) {
+  out.print(decode(prompt_tokens, itos))
+  tokens = clone(prompt_tokens)
+  i = 0
+  while i < max_new_tokens {
+    ctx_len = len(tokens)
+    if ctx_len > model["cfg"]["max_seq"] {
+      ctx_len = model["cfg"]["max_seq"]
+    }
+    ctx_start = len(tokens) - ctx_len
+    ctx = []
+    j = ctx_start
+    while j < len(tokens) {
+      push(ctx, tokens[j])
+      j = j + 1
+    }
+    logits = gpt_forward(model, ctx)
+    last_row = tensor.slice_2d(logits, ctx_len - 1, ctx_len, 0, model["cfg"]["vocab_size"])
+    next_token = tensor.sample(last_row, temperature)
+    push(tokens, next_token)
+    ks = to_str(next_token)
+    if has(itos, ks) {
+      out.print(itos[ks])
+    } else {
+      out.print("?")
+    }
+    i = i + 1
+  }
+  out.println("")
+}
+
+fn tokenize(text, stoi, unk_id) {
+  tokens = []
+  i = 0
+  while i < len(text) {
+    ch = text[i]
+    id = unk_id
+    if has(stoi, ch) {
+      id = stoi[ch]
+    }
+    push(tokens, id)
+    i = i + 1
+  }
+  return tokens
+}
+
+fn main(args) {
+  out.println("=== GrokTorch GPT-1 V5 — Lowercase-only Character Model ===")
+  out.println("Model: d=192, layers=5, ~1.9M params")
+  out.println("Vocab: lowercase a-z + space + punctuation (~30 chars)")
+  out.println("Data: 500K chars, 8000 steps")
+  out.println("")
+
+  // Use preprocessed lowercase file
+  data_path = "learn\\examples\\gpt\\c4_lower.txt"
+  if !exists(data_path) {
+    out.println("ERROR: " + data_path + " not found! Run: pwsh preprocess first")
+    return 1
+  }
+  fh = open(data_path)
+  text = read(fh)
+  close(fh)
+
+  // Build vocab
+  vocab = build_vocab_lower()
+  out.println("Vocab size: " + vocab["vocab_size"])
+
+  // Encode directly (already normalized)
+  work_chars = 500000
+  if len(text) < work_chars {
+    work_chars = len(text)
+  }
+  out.println("Encoding " + work_chars + " chars...")
+  unk_id = vocab["vocab_size"] - 1
+  data = tokenize(text, vocab["stoi"], unk_id)
+  out.println("Tokens: " + len(data))
+
+  // Config
+  cfg = {
+    "vocab_size": vocab["vocab_size"],
+    "d_model": 192,
+    "n_heads": 4,
+    "n_layers": 5,
+    "ff_hidden": 576,
+    "max_seq": 96
+  }
+  batch_size = 2
+  seq_len = 96
+  train_steps = 8000
+  lr = 5e-4
+
+  // Create model
+  out.println("Creating model...")
+  model = gpt_init(cfg)
+  params = gpt_params(model)
+  total = 0
+  pi = 0
+  while pi < len(params) {
+    total = total + tensor.numel(params[pi])
+    pi = pi + 1
+  }
+  out.println("Parameters: " + total)
+  out.println("")
+
+  tensor.enable_grad()
+
+  out.println("Training " + train_steps + " steps...")
+  out.println("Estimated time: ~190 minutes")
+  out.println("")
+
+  best_loss = 999.0
+  step = 0
+  while step < train_steps {
+    cur_lr = lr
+    if step < 1000 {
+      cur_lr = lr * step / 1000.0
+    }
+
+    batch = get_batch(data, batch_size, seq_len, step)
+    batch_x = batch["x"]
+    batch_y = batch["y"]
+
+    total_loss = 0.0
+    bi = 0
+    while bi < batch_size {
+      x_tokens = batch_x[bi]
+      y_tokens = batch_y[bi]
+      logits = gpt_forward(model, x_tokens)
+      loss_tensor = tensor.cross_entropy(logits, y_tokens)
+      total_loss = total_loss + tensor.to_value(loss_tensor)
+      tensor.backward(loss_tensor)
+      bi = bi + 1
+    }
+
+    tensor.step_adam(params, cur_lr, 0.9, 0.999, 1e-8, step + 1.0)
+    tensor.zero_grad(params)
+
+    if step % 100 == 0 {
+      tensor.force_gc()
+    }
+
+    avg_loss = total_loss / batch_size
+    if avg_loss < best_loss {
+      best_loss = avg_loss
+    }
+
+    if step % 100 == 0 {
+      out.println("step " + step + " loss=" + avg_loss + " best=" + best_loss + " lr=" + cur_lr)
+    }
+
+    // Generation checkpoint every 1000 steps
+    if step % 1000 == 0 {
+      out.println("")
+      out.println("--- Gen @ step " + step + " ---")
+      tensor.disable_grad()
+
+      prompts = ["the ", "i think ", "in the ", "we ", "this is "]
+      pi2 = 0
+      while pi2 < len(prompts) {
+        prompt = tokenize(prompts[pi2], vocab["stoi"], unk_id)
+        generate(model, prompt, 80, vocab["itos"], 0.8)
+        pi2 = pi2 + 1
+      }
+
+      tensor.enable_grad()
+    }
+
+    step = step + 1
+  }
+
+  tensor.force_gc()
+  tensor.disable_grad()
+
+  out.println("")
+  out.println("========================================")
+  out.println("  TRAINING COMPLETE")
+  out.println("  Best loss: " + best_loss)
+  out.println("========================================")
+  out.println("")
+
+  // === LONG PARAGRAPH GENERATION ===
+  out.println("========================================")
+  out.println("  AI-GENERATED PARAGRAPH (temp=0.7)")
+  out.println("========================================")
+  
+  // Use a natural starting prompt
+  start_prompt = "the world is a"
+  prompt_tokens = tokenize(start_prompt, vocab["stoi"], unk_id)
+  generate(model, prompt_tokens, 600, vocab["itos"], 0.7)
+
+  out.println("")
+  out.println("========================================")
+  out.println("  AI-GENERATED PARAGRAPH (temp=0.9)")
+  out.println("========================================")
+  
+  prompt_tokens2 = tokenize(start_prompt, vocab["stoi"], unk_id)
+  generate(model, prompt_tokens2, 600, vocab["itos"], 0.9)
+
+  out.println("")
+  out.println("=== Done ===")
+  return 0
+}

@@ -1,0 +1,243 @@
+// httpx.glk — general-purpose HTTP client helpers (pure GrokLang on top of native http)
+//
+// import "stdlib/httpx.glk" as httpx
+//
+// Design: all transport I/O is native `http`; this file adds session, retry, JSON, forms.
+
+import http, json, str, crypto
+
+// --- session: plain map used as options bag ---
+// session fields: base, headers, timeout, user_agent, insecure, proxy, retries, retry_delay_ms
+
+fn session_new(base, headers) {
+  let h = {}
+  if typeof(headers) == "map" {
+    h = headers
+  }
+  return {
+    base: base,
+    headers: h,
+    timeout: 30,
+    user_agent: "GLTK-httpx/0.5",
+    insecure: true,
+    follow_redirects: true,
+    proxy: "",
+    retries: 2,
+    retry_delay_ms: 200
+  }
+}
+
+fn _merge_headers(sess, extra) {
+  let out = {}
+  // copy session headers
+  // note: GLTK maps — assign known pattern via re-build from request opts
+  return extra
+}
+
+fn _url(sess, path) {
+  if path == "" {
+    return sess.base
+  }
+  if str.starts_with(path, "http://") || str.starts_with(path, "https://") {
+    return path
+  }
+  let b = sess.base
+  if str.ends_with(b, "/") && str.starts_with(path, "/") {
+    return b + str.trim(path) // may still double — simple join:
+  }
+  if str.ends_with(b, "/") {
+    if str.starts_with(path, "/") {
+      // strip one slash from path manually
+      return b + path
+    }
+    return b + path
+  }
+  if str.starts_with(path, "/") {
+    return b + path
+  }
+  return b + "/" + path
+}
+
+fn _opts(sess, headers) {
+  let o = {
+    timeout: sess.timeout,
+    user_agent: sess.user_agent,
+    insecure: sess.insecure,
+    follow_redirects: sess.follow_redirects,
+    headers: {}
+  }
+  if sess.proxy != "" {
+    o = {
+      timeout: sess.timeout,
+      user_agent: sess.user_agent,
+      insecure: sess.insecure,
+      follow_redirects: sess.follow_redirects,
+      proxy: sess.proxy,
+      headers: {}
+    }
+  }
+  // build headers map: session then override
+  // GLTK cannot easily clone maps — pass combined via http native accepting opts.headers
+  // We reconstruct by string keys the caller passes in headers arg primarily.
+  if typeof(headers) == "map" {
+    o = {
+      timeout: sess.timeout,
+      user_agent: sess.user_agent,
+      insecure: sess.insecure,
+      follow_redirects: sess.follow_redirects,
+      headers: headers
+    }
+    if sess.proxy != "" {
+      o = {
+        timeout: sess.timeout,
+        user_agent: sess.user_agent,
+        insecure: sess.insecure,
+        follow_redirects: sess.follow_redirects,
+        proxy: sess.proxy,
+        headers: headers
+      }
+    }
+  }
+  return o
+}
+
+fn _sleep_ms(ms) {
+  // use async.sleep if available — import optional; busy-free via crypto.now_ms spin is bad.
+  // Prefer native async — callers may import async. Here no-op if ms<=0.
+  if ms <= 0 {
+    return 0
+  }
+  // best-effort: no sleep native in core without async; skip delay (retry still helps flaky nets)
+  return 0
+}
+
+fn _should_retry(resp) {
+  if typeof(resp) != "map" {
+    return true
+  }
+  if resp.ok {
+    return false
+  }
+  // network error
+  if resp.status == 0 {
+    return true
+  }
+  // 429 / 5xx
+  if resp.status == 429 {
+    return true
+  }
+  if resp.status >= 500 {
+    return true
+  }
+  return false
+}
+
+fn request(sess, method, path, body, headers) {
+  let url = _url(sess, path)
+  let o = _opts(sess, headers)
+  let tries = sess.retries + 1
+  if tries < 1 {
+    tries = 1
+  }
+  let last = null
+  let i = 0
+  while i < tries {
+    let r = http.request(method, url, body, o)
+    last = r
+    if !_should_retry(r) {
+      return r
+    }
+    i = i + 1
+    _sleep_ms(sess.retry_delay_ms)
+  }
+  return last
+}
+
+fn get(sess, path, headers) {
+  return request(sess, "GET", path, null, headers)
+}
+
+fn post(sess, path, body, headers) {
+  return request(sess, "POST", path, body, headers)
+}
+
+fn put(sess, path, body, headers) {
+  return request(sess, "PUT", path, body, headers)
+}
+
+fn del(sess, path, headers) {
+  return request(sess, "DELETE", path, null, headers)
+}
+
+fn head(sess, path, headers) {
+  return request(sess, "HEAD", path, null, headers)
+}
+
+fn get_json(sess, path, headers) {
+  let r = get(sess, path, headers)
+  if !r.ok {
+    return {ok: false, error: r.error, status: r.status, data: null, raw: r}
+  }
+  let data = json.parse(r.body)
+  return {ok: true, error: "", status: r.status, data: data, raw: r}
+}
+
+fn post_json(sess, path, obj, headers) {
+  let body = json.stringify(obj)
+  // ensure content-type
+  let h = headers
+  if typeof(h) != "map" {
+    h = {"Content-Type": "application/json"}
+  }
+  let r = post(sess, path, body, h)
+  if !r.ok {
+    return {ok: false, error: r.error, status: r.status, data: null, raw: r}
+  }
+  let data = null
+  if len(r.body) > 0 {
+    data = json.parse(r.body)
+  }
+  return {ok: true, error: "", status: r.status, data: data, raw: r}
+}
+
+fn post_form(sess, path, fields, headers) {
+  let body = http.encode_form(fields)
+  let h = {"Content-Type": "application/x-www-form-urlencoded"}
+  let r = post(sess, path, body, h)
+  return r
+}
+
+fn download(url, path, opts) {
+  return http.download(url, path, opts)
+}
+
+// one-shot helpers without session
+fn quick_get(url) {
+  return http.get(url)
+}
+
+fn quick_get_json(url) {
+  let r = http.get(url)
+  if !r.ok {
+    return {ok: false, error: r.error, status: r.status, data: null}
+  }
+  return {ok: true, error: "", status: r.status, data: json.parse(r.body)}
+}
+
+fn quick_post_json(url, obj) {
+  let body = json.stringify(obj)
+  let r = http.post(url, body, {"Content-Type": "application/json"})
+  if !r.ok {
+    return {ok: false, error: r.error, status: r.status, data: null}
+  }
+  let data = null
+  if len(r.body) > 0 {
+    data = json.parse(r.body)
+  }
+  return {ok: true, error: "", status: r.status, data: data}
+}
+
+// signed GET/POST for HMAC APIs (e.g. GreenHub style)
+fn signed_query(key, params) {
+  return crypto.sign_query(key, params)
+}

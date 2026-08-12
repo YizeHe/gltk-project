@@ -1,0 +1,59 @@
+// ch03_06_functions.glk — 函数、参数、return、多函数协作
+// .\gltk.exe run learn\examples\ch03_06_functions.glk
+
+import out
+
+// 顶层函数：整个文件可见
+fn add(a, b) {
+  return a + b
+}
+
+fn max2(a, b) {
+  if a >= b {
+    return a
+  }
+  return b
+}
+
+// 无显式 return 时返回 null（调用方勿假设有值）
+fn log_only(msg) {
+  out.println("[log]", msg)
+}
+
+// 递归：阶乘
+fn fact(n) {
+  if n <= 1 {
+    return 1
+  }
+  return n * fact(n - 1)
+}
+
+// 多返回值？语言无元组——用 map 或数组打包
+fn divmod(a, b) {
+  return {q: a / b, r: a % b}
+}
+
+fn main(args) {
+  out.println("add(2,3)=", add(2, 3))
+  out.println("max2(9,4)=", max2(9, 4))
+  log_only("hello")
+
+  out.println("fact(5)=", fact(5))
+
+  let dm = divmod(17, 5)
+  out.println("17 divmod 5 => q=", dm.q, " r=", dm.r)
+
+  // 函数是值：赋给变量再调用
+  let op = add
+  out.println("op(10,1)=", op(10, 1))
+
+  // 高阶：用 lambda（嵌套位置写 `fn name()` 命名函数会解析失败）
+  let inc = fn(x) { return x + 1 }
+  out.println("inc twice=", inc(inc(5)))
+
+  // 把函数当参数：定义顶层 apply 见文件底部风格——这里直接内联调用
+  let sq = fn(x) { return x * x }
+  out.println("sq(12)=", sq(12))
+
+  return 0
+}

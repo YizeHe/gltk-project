@@ -1,0 +1,31 @@
+# Build artifacts
+*.exe
+*.exe~
+*.test
+*.out
+/gltk
+/glrt
+/work/
+/a.out
+
+# Bytecode (keep intentional samples/*.glkb if needed; ignore local builds)
+*.glkb
+!samples/hello.glkb
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local scratch
+/tmp/
+/_tmp*/
+.env
+.dev.vars
+*.log
+
+# Large / private corpora (not part of public tree)
+learn/examples/_tmp*/
+learn/examples/gpt/c4_*.txt

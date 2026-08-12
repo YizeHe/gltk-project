@@ -1,0 +1,47 @@
+// ch07_12_report_json.glk — 生成 JSON 分析报告并落盘
+// .\gltk.exe run learn\examples\ch07_12_report_json.glk -- learn\testdata\re\05_pattern_deadbeef.bin
+
+import out, fs, bin, crypto, json, str
+
+fn main(args) {
+  let path = "learn/testdata/re/05_pattern_deadbeef.bin"
+  if len(args) > 0 { path = args[0] }
+  let data = fs.read_bytes(path)
+
+  let report = {}
+  report.ok = true
+  report.path = path
+  report.size = bin.len(data)
+  report.md5 = crypto.md5_hex(data)
+  report.sha256 = crypto.sha256_hex(data)
+  report.mz = bin.len(data) >= 2 && bin.u16le(data, 0) == 0x5A4D
+
+  // pattern hits
+  let needle = bin.slice(bin.from_u32le([0xEFBEADDE]), 0, 4)
+  let hits = []
+  // 收集偏移到字符串列表（数组字面量难动态 append：打印并计 count）
+  let count = 0
+  let start = 0
+  while start < bin.len(data) {
+    let sub = bin.slice(data, start, bin.len(data))
+    let rel = bin.find_bytes(sub, needle)
+    if rel < 0 { break }
+    let abs = start + rel
+    count = count + 1
+    start = abs + 1
+    if count > 20 { break }
+  }
+  report.deadbeef_hits = count
+  report.tool = "gltk-learn-ch07"
+  report.notes = "synthetic fixture scan"
+
+  let text = json.stringify(report)
+  out.println(text)
+
+  let outdir = "learn/examples/_tmp_ch07"
+  fs.mkdir_all(outdir)
+  let outp = outdir + "/report.json"
+  fs.write_text(outp, text)
+  out.println("wrote", outp)
+  return 0
+}

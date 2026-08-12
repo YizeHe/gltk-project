@@ -1,0 +1,57 @@
+// entropy_scan.glk — string extract + Shannon entropy scan (Phase 4 strings_re)
+import strings_re, fs, out, bin
+
+fn main(args) {
+  let data = null
+  if len(args) >= 1 {
+    let path = args[0]
+    if !fs.exists(path) {
+      out.println("file not found: " + path)
+      return 1
+    }
+    data = fs.read_bytes(path)
+  } else {
+    // synthetic: low-entropy text + high-entropy-ish random-looking bytes
+    data = bin.concat("Hello GLTK entropy demo ABCDEF", bin.from_u32le([
+      0x9a3c7e11, 0x55f0ab92, 0xc1d4e87f, 0x2468ace0,
+      0xfedcba98, 0x13579bdf, 0x86a4c2e1, 0x0b1d3f57
+    ]))
+  }
+
+  out.println("size=" + ("" + len(data)))
+  let total = strings_re.entropy_all(data)
+  out.println("entropy_all=" + ("" + total))
+
+  let strs = strings_re.extract(data, 4)
+  out.println("Found " + ("" + len(strs)) + " ascii strings (min=4)")
+  let n = len(strs)
+  if n > 20 {
+    n = 20
+  }
+  for i in range(0, n) {
+    let s = strs[i]
+    out.println("  @" + ("" + s.offset) + ": " + s.value)
+  }
+
+  let u16 = strings_re.extract_utf16(data, 4)
+  out.println("utf16le strings=" + ("" + len(u16)))
+
+  let blocks = strings_re.entropy_map(data, 16)
+  out.println("entropy_map blocks=" + ("" + len(blocks)) + " (block=16)")
+  let m = len(blocks)
+  if m > 8 {
+    m = 8
+  }
+  for i in range(0, m) {
+    let b = blocks[i]
+    out.println("  block @" + ("" + b.offset) + " size=" + ("" + b.size) + " H=" + ("" + b.entropy))
+  }
+
+  let regions = strings_re.find_high_entropy(data, 6.0, 16)
+  out.println("high entropy regions (thr=6.0, block=16): " + ("" + len(regions)))
+  for i in range(0, len(regions)) {
+    let r = regions[i]
+    out.println("  High entropy at @" + ("" + r.offset) + " size=" + ("" + r.size) + " H=" + ("" + r.entropy))
+  }
+  return 0
+}

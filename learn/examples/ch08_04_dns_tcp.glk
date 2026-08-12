@@ -1,0 +1,47 @@
+// ch08_04_dns_tcp.glk — DNS + 原始 TCP HTTP
+// .\gltk.exe run learn\examples\ch08_04_dns_tcp.glk
+
+import out, net
+import "stdlib/netutil.glk" as netu
+
+fn main(args) {
+  let host = "example.com"
+  if len(args) > 0 { host = args[0] }
+
+  out.println("--- resolve ---")
+  let dns = net.resolve(host)
+  out.println("ok=", dns.ok)
+  if dns.ok {
+    let i = 0
+    while i < len(dns.addrs) && i < 5 {
+      out.println(" ", dns.addrs[i])
+      i = i + 1
+    }
+  } else {
+    out.println("dns error=", dns.error)
+  }
+
+  out.println("--- dial TCP :80 ---")
+  let c = net.dial("tcp", host + ":80", 12)
+  out.println("dial ok=", c.ok, " err=", c.error)
+  if !c.ok {
+    return 1
+  }
+
+  let req = "HEAD / HTTP/1.0\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+  let w = c.write(req)
+  out.println("write ok=", w.ok)
+
+  let r = c.read(512)
+  out.println("read ok=", r.ok, " n=", r.n, " eof=", r.eof)
+  if r.ok && r.n > 0 {
+    // body may be bytes or string depending on bind
+    out.println("chunk typeof=", typeof(r.data))
+  }
+  c.close()
+
+  out.println("--- netutil.http_get_raw ---")
+  let raw = netu.http_get_raw(host, 80, "/")
+  out.println("raw ok=", raw.ok, " body_len=", len(raw.body))
+  return 0
+}

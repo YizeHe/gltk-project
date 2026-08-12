@@ -1,0 +1,52 @@
+// ch03_05_try.glk — try / catch / throw
+// .\gltk.exe run learn\examples\ch03_05_try.glk
+
+import out
+
+fn must_positive(n) {
+  if n <= 0 {
+    throw "need positive, got " + ("" + n)
+  }
+  return n
+}
+
+fn safe_div(a, b) {
+  try {
+    if b == 0 {
+      throw "division by zero"
+    }
+    return a / b
+  } catch e {
+    out.println("safe_div catch:", e)
+    return 0
+  }
+}
+
+fn main(args) {
+  // 1) 基本 throw/catch
+  try {
+    throw "boom"
+    out.println("never")
+  } catch e {
+    out.println("caught=", e)
+  }
+
+  // 2) 函数内 throw，外层 catch
+  try {
+    must_positive(-1)
+  } catch e {
+    out.println("must_positive:", e)
+  }
+
+  out.println("must_positive(3)=", must_positive(3))
+
+  // 3) 封装
+  out.println("10/2=", safe_div(10, 2))
+  out.println("10/0=", safe_div(10, 0))
+
+  // 4) catch 后继续执行
+  out.println("still running after catch")
+
+  // 说明：未捕获错误会终止 VM；算术错误等部分路径未必进 try（见语言文档）
+  return 0
+}

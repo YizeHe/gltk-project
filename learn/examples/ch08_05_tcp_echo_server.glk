@@ -1,0 +1,51 @@
+// ch08_05_tcp_echo_server.glk — 本机 TCP echo 自测
+// .\gltk.exe run learn\examples\ch08_05_tcp_echo_server.glk
+
+import out, net, async
+
+fn client_ping(addr) {
+  async.sleep(80)
+  let cli = net.dial("tcp", addr, 5)
+  if !cli.ok {
+    return {ok: false, error: cli.error}
+  }
+  cli.write("ping-ch08")
+  let resp = cli.read(64)
+  cli.close()
+  return {ok: resp.ok, n: resp.n}
+}
+
+fn main(args) {
+  let port = 19080
+  let addr = "127.0.0.1:" + ("" + port)
+
+  let ln = net.listen("tcp", addr)
+  if !ln.ok {
+    out.println("listen fail:", ln.error)
+    out.println("(port in use? change port in script)")
+    return 1
+  }
+  out.println("listening", addr)
+
+  // 客户端在后台连进来
+  let f = async.spawn(client_ping, [addr])
+
+  // 主线程 accept 一次
+  let c = ln.accept()
+  out.println("accept ok=", c.ok)
+  if c.ok {
+    let r = c.read(256)
+    out.println("server read ok=", r.ok, " n=", r.n)
+    if r.ok && r.n > 0 {
+      c.write(r.data)
+    }
+    c.close()
+  }
+
+  let cr = async.await(f)
+  out.println("client result ok=", cr.ok, " n=", cr.n)
+
+  ln.close()
+  out.println("done")
+  return cr.ok ? 0 : 2
+}

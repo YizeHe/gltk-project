@@ -1,0 +1,75 @@
+// ch03_03_for.glk — for-in 数组 / map / range / break
+// .\gltk.exe run learn\examples\ch03_03_for.glk
+
+import out
+
+fn main(args) {
+  // ---- 数组：按元素 ----
+  out.println("-- array --")
+  let xs = [10, 20, 30]
+  for v in xs {
+    out.println("v=", v)
+  }
+
+  // ---- range ----
+  out.println("-- range --")
+  for i in range(0, 4) {
+    out.println("i=", i)
+  }
+
+  // 带步长
+  out.println("-- range step --")
+  for j in range(0, 10, 3) {
+    out.println("j=", j) // 0,3,6,9
+  }
+
+  // ---- map：按键迭代 ----
+  out.println("-- map keys --")
+  let m = {name: "demo", port: 8080, ok: true}
+  for k in m {
+    out.println("key=", k, " value=", m[k])
+  }
+
+  // ---- 下标式遍历（需要索引时）----
+  out.println("-- index loop --")
+  let arr = ["a", "b", "c"]
+  for i in range(0, len(arr)) {
+    out.println(i, "->", arr[i])
+  }
+
+  // ---- break / continue in for ----
+  out.println("-- break/continue --")
+  let s = 0
+  for n in range(1, 10) {
+    if n == 3 {
+      continue
+    }
+    if n == 7 {
+      break
+    }
+    s = s + n
+  }
+  // 1+2+4+5+6 = 18
+  out.println("s=", s)
+
+  // ---- 嵌套 for：笛卡尔积一小截 ----
+  out.println("-- nested --")
+  for x in [1, 2] {
+    for y in ["x", "y"] {
+      out.println("(" + ("" + x) + "," + y + ")")
+    }
+  }
+
+  // ---- 过滤收集（手写）----
+  let src = [1, 2, 3, 4, 5, 6]
+  let evens = []
+  for v in src {
+    if v % 2 == 0 {
+      // 数组没有 push 时：用拼接思路（见下）——当前用手动构造演示
+      // 这里仅打印偶数
+      out.println("even", v)
+    }
+  }
+
+  return 0
+}

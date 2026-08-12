@@ -1,0 +1,33 @@
+// learn/examples/ch02_01_comments_idents.glk
+// 第 2 章：注释、标识符、关键字
+// 运行: .\gltk.exe run learn\examples\ch02_01_comments_idents.glk
+
+import out
+
+/*
+  这是块注释。
+  可以跨多行。
+  块注释里写 // 不会提前结束。
+*/
+
+fn main(args) {
+  // 行注释：从 // 到行尾
+
+  // 合法标识符示例
+  let count = 1
+  let _tmp = 2
+  let userName = "alice"
+  let n2 = 3
+
+  out.println("count=", count)
+  out.println("_tmp=", _tmp)
+  out.println("userName=", userName)
+  out.println("n2=", n2)
+
+  // 关键字不能当变量名：let if = 1  // 非法
+  // 下面用「看起来像关键字」的标识是不允许的，已注释掉
+  // let fn = 1
+  // let return = 2
+
+  return 0
+}

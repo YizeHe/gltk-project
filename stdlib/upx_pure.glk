@@ -1,0 +1,1100 @@
+// upx_pure.glk — Pure GrokLang UPX PE unpacker (no Go `upx` module).
+//
+// Uses only generic bin/fs/out/str + bitwise ops. PE parsing and LZMA are
+// implemented in pure .glk (range decoder + LZMA + PE rebuild).
+//
+// Public API:
+//   is_upx(bytes) -> bool
+//   info(bytes)   -> map {is_upx, version_str, method, u_len, c_len, filter,
+//                         upx1_ptr, upx1_raw, note, ...}
+//   unpack(bytes) -> map {ok, data|error, note, size}
+//
+// Method 14 (LZMA) is fully supported. NRV methods return a clear error.
+//
+// import "stdlib/upx_pure.glk" as upx_pure
+
+import bin, str
+
+// ---------------------------------------------------------------------------
+// Shared LZMA decoder state via globals (library top-level let is skipped).
+// Set only inside lzma_decode_* entry points.
+// ---------------------------------------------------------------------------
+// LZS fields: src, in_pos, in_len, range, code, out, out_pos, out_len,
+//   rep0, rep1, rep2, rep3, state, probs, lc, lp, pb, pos_mask, lit_pos_mask, err
+
+// Prob table layout (LZMA SDK / LzmaStateDecode.c)
+// IsMatch=0 IsRep=192 IsRepG0=204 IsRepG1=216 IsRepG2=228 IsRep0Long=240
+// PosSlot=432 SpecPos=688 Align=802 LenCoder=818 RepLenCoder=1332 Literal=1846
+
+// ============================= small helpers ================================
+
+fn u32_mask(x) {
+  return x & 0xffffffff
+}
+
+fn align_up(v, a) {
+  if a == 0 {
+    return v
+  }
+  return (v + a - 1) & ~(a - 1)
+}
+
+fn method_name(m) {
+  if m == 2 {
+    return "NRV2B"
+  }
+  if m == 5 {
+    return "NRV2D"
+  }
+  if m == 8 {
+    return "NRV2E"
+  }
+  if m == 14 {
+    return "LZMA"
+  }
+  return "method_" + m
+}
+
+fn has_mz(data) {
+  if bin.len(data) < 0x40 {
+    return false
+  }
+  if bin.u8(data, 0) != 0x4d {
+    return false
+  }
+  if bin.u8(data, 1) != 0x5a {
+    return false
+  }
+  return true
+}
+
+fn bswap32(v) {
+  let x = u32_mask(v)
+  let b0 = x & 0xff
+  let b1 = (x >> 8) & 0xff
+  let b2 = (x >> 16) & 0xff
+  let b3 = (x >> 24) & 0xff
+  return u32_mask((b0 << 24) | (b1 << 16) | (b2 << 8) | b3)
+}
+
+// ============================= PE section scan ==============================
+
+fn pe_e_lfanew(data) {
+  if bin.len(data) < 0x40 {
+    return -1
+  }
+  return bin.u32le(data, 0x3c)
+}
+
+fn pe_section_count(data) {
+  let e = pe_e_lfanew(data)
+  if e < 0 {
+    return 0
+  }
+  if e + 24 > bin.len(data) {
+    return 0
+  }
+  if bin.u8(data, e) != 0x50 {
+    return 0
+  }
+  if bin.u8(data, e + 1) != 0x45 {
+    return 0
+  }
+  return bin.u16le(data, e + 6)
+}
+
+fn pe_opt_size(data) {
+  let e = pe_e_lfanew(data)
+  return bin.u16le(data, e + 20)
+}
+
+fn pe_sec_table_off(data) {
+  let e = pe_e_lfanew(data)
+  let opt = pe_opt_size(data)
+  return e + 24 + opt
+}
+
+// name is 8-char ASCII (may include trailing zeros in file)
+fn pe_sec_name_at(data, so) {
+  let s = ""
+  let j = 0
+  while j < 8 {
+    let c = bin.u8(data, so + j)
+    if c == 0 {
+      break
+    }
+    s = s + str.from_utf8(bin.from_u8(c))
+    j = j + 1
+  }
+  return s
+}
+
+// Returns map {name, vsize, vaddr, rawsize, rawptr} or null
+fn pe_find_section(data, want) {
+  if !has_mz(data) {
+    return null
+  }
+  let e = pe_e_lfanew(data)
+  if e < 0 || e + 24 > bin.len(data) {
+    return null
+  }
+  if bin.u8(data, e) != 0x50 || bin.u8(data, e + 1) != 0x45 {
+    return null
+  }
+  let num = bin.u16le(data, e + 6)
+  let opt = bin.u16le(data, e + 20)
+  let off = e + 24 + opt
+  let i = 0
+  while i < num {
+    let so = off + i * 40
+    if so + 40 > bin.len(data) {
+      break
+    }
+    let nm = pe_sec_name_at(data, so)
+    if nm == want {
+      return {
+        name: nm,
+        vsize: bin.u32le(data, so + 8),
+        vaddr: bin.u32le(data, so + 12),
+        rawsize: bin.u32le(data, so + 16),
+        rawptr: bin.u32le(data, so + 20)
+      }
+    }
+    i = i + 1
+  }
+  return null
+}
+
+fn pe_image_end(data) {
+  if !has_mz(data) {
+    return 0
+  }
+  let e = pe_e_lfanew(data)
+  if e < 0 || e + 24 > bin.len(data) {
+    return 0
+  }
+  let num = bin.u16le(data, e + 6)
+  let opt = bin.u16le(data, e + 20)
+  let off = e + 24 + opt
+  let end = 0
+  let i = 0
+  while i < num {
+    let so = off + i * 40
+    if so + 40 > bin.len(data) {
+      break
+    }
+    let rp = bin.u32le(data, so + 20)
+    let rs = bin.u32le(data, so + 16)
+    let ee = rp + rs
+    if ee > end {
+      end = ee
+    }
+    i = i + 1
+  }
+  return end
+}
+
+fn default_dos_stub() {
+  let stub = bin.zeros(0x80)
+  stub = bin.write_at(stub, 0, bin.from_u8(0x4d))
+  stub = bin.write_at(stub, 1, bin.from_u8(0x5a))
+  // header paragraphs = 4 at offset 8 (u16)
+  stub = bin.write_at(stub, 8, bin.from_u8(4))
+  stub = bin.write_at(stub, 9, bin.from_u8(0))
+  // e_lfanew = 0x80
+  stub = bin.write_at(stub, 0x3c, bin.from_u8(0x80))
+  stub = bin.write_at(stub, 0x3d, bin.from_u8(0))
+  stub = bin.write_at(stub, 0x3e, bin.from_u8(0))
+  stub = bin.write_at(stub, 0x3f, bin.from_u8(0))
+  return stub
+}
+
+fn dos_stub_from_packed(packed) {
+  if !has_mz(packed) {
+    return default_dos_stub()
+  }
+  let e = pe_e_lfanew(packed)
+  if e > 0x40 && e < 0x1000 && e < bin.len(packed) {
+    return bin.slice(packed, 0, e)
+  }
+  return default_dos_stub()
+}
+
+// ============================= UPX pack header ==============================
+
+fn is_valid_method(m) {
+  if m == 2 {
+    return true
+  }
+  if m == 5 {
+    return true
+  }
+  if m == 8 {
+    return true
+  }
+  if m == 14 {
+    return true
+  }
+  return false
+}
+
+// Returns pack-header map or null
+fn find_pack_header(data) {
+  let n = bin.len(data)
+  let i = 0
+  while i + 32 < n {
+    if bin.u8(data, i) == 0x55 {
+      if bin.u8(data, i + 1) == 0x50 {
+        if bin.u8(data, i + 2) == 0x58 {
+          if bin.u8(data, i + 3) == 0x21 {
+            let ver = bin.u8(data, i + 4)
+            let method = bin.u8(data, i + 6)
+            if ver >= 8 && ver <= 16 && is_valid_method(method) {
+              let u_len = bin.u32le(data, i + 16)
+              let c_len = bin.u32le(data, i + 20)
+              let ufs = bin.u32le(data, i + 24)
+              if c_len > 0 && c_len <= n && u_len > 0 && u_len <= 268435456 && ufs <= 268435456 {
+                return {
+                  offset: i,
+                  version: ver,
+                  format: bin.u8(data, i + 5),
+                  method: method,
+                  level: bin.u8(data, i + 7),
+                  u_adler: bin.u32le(data, i + 8),
+                  c_adler: bin.u32le(data, i + 12),
+                  u_len: u_len,
+                  c_len: c_len,
+                  u_file_size: ufs,
+                  filter: bin.u8(data, i + 28),
+                  filter_cto: bin.u8(data, i + 29),
+                  n_mru: bin.u8(data, i + 30),
+                  has_checksum: bin.u8(data, i + 31)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    i = i + 1
+  }
+  return null
+}
+
+fn find_version_str(data) {
+  // look for "3.0x"
+  let n = bin.len(data)
+  let i = 0
+  while i + 4 < n {
+    if bin.u8(data, i) == 0x33 {
+      if bin.u8(data, i + 1) == 0x2e {
+        if bin.u8(data, i + 2) == 0x30 {
+          let d = bin.u8(data, i + 3)
+          if d >= 0x30 && d <= 0x39 {
+            return str.from_utf8(bin.slice(data, i, i + 4))
+          }
+        }
+      }
+    }
+    i = i + 1
+  }
+  return ""
+}
+
+// ============================= Public: is_upx / info ========================
+
+fn is_upx(data) {
+  if bin.len(data) < 0x200 {
+    return false
+  }
+  if !has_mz(data) {
+    return false
+  }
+  if pe_find_section(data, "UPX0") != null {
+    return true
+  }
+  if pe_find_section(data, "UPX1") != null {
+    return true
+  }
+  if find_pack_header(data) != null {
+    return true
+  }
+  return false
+}
+
+fn info(data) {
+  let r = {
+    is_upx: false,
+    version_str: "",
+    method: 0,
+    method_name: "",
+    u_len: 0,
+    c_len: 0,
+    filter: 0,
+    filter_cto: 0,
+    upx1_ptr: 0,
+    upx1_raw: 0,
+    upx0_virt: 0,
+    note: ""
+  }
+  if !has_mz(data) {
+    r.note = "not MZ"
+    return r
+  }
+  r.is_upx = is_upx(data)
+  r.version_str = find_version_str(data)
+  let ph = find_pack_header(data)
+  if ph != null {
+    r.method = ph.method
+    r.method_name = method_name(ph.method)
+    r.u_len = ph.u_len
+    r.c_len = ph.c_len
+    r.filter = ph.filter
+    r.filter_cto = ph.filter_cto
+  }
+  let u0 = pe_find_section(data, "UPX0")
+  if u0 != null {
+    r.upx0_virt = u0.vsize
+  }
+  let u1 = pe_find_section(data, "UPX1")
+  if u1 != null {
+    r.upx1_ptr = u1.rawptr
+    r.upx1_raw = u1.rawsize
+  }
+  if r.is_upx != true {
+    r.note = "no UPX sections/header"
+  }
+  return r
+}
+
+// ============================= LZMA range decoder ===========================
+
+fn lzs_init_probs(num) {
+  let p = []
+  let i = 0
+  while i < num {
+    push(p, 1024)
+    i = i + 1
+  }
+  return p
+}
+
+fn lzs_rc_init() {
+  LZS.range = 0xffffffff
+  LZS.code = 0
+  let i = 0
+  while i < 5 {
+    if LZS.in_pos >= LZS.in_len {
+      LZS.err = 1
+      return
+    }
+    let b = bin.u8(LZS.src, LZS.in_pos)
+    LZS.in_pos = LZS.in_pos + 1
+    LZS.code = u32_mask((LZS.code << 8) | b)
+    i = i + 1
+  }
+}
+
+fn lzs_norm() {
+  while LZS.range < 0x1000000 {
+    if LZS.in_pos >= LZS.in_len {
+      LZS.err = 1
+      return
+    }
+    LZS.range = u32_mask(LZS.range << 8)
+    let b = bin.u8(LZS.src, LZS.in_pos)
+    LZS.in_pos = LZS.in_pos + 1
+    LZS.code = u32_mask((LZS.code << 8) | b)
+  }
+}
+
+// Decode one bit; updates LZS.probs[idx]. Returns 0 or 1.
+// CRITICAL: RC_NORMALIZE must run BEFORE bound test (LzmaDecode.c IfBit0).
+fn lzs_bit(idx) {
+  lzs_norm()
+  let probs = LZS.probs
+  let p = probs[idx]
+  // bound = (range >> 11) * p  as uint32
+  let bound = u32_mask((LZS.range >> 11) * p)
+  if LZS.code < bound {
+    LZS.range = bound
+    probs[idx] = p + ((2048 - p) >> 5)
+    return 0
+  }
+  LZS.range = u32_mask(LZS.range - bound)
+  LZS.code = u32_mask(LZS.code - bound)
+  probs[idx] = p - (p >> 5)
+  return 1
+}
+
+fn lzs_bit_tree(base, levels) {
+  let res = 1
+  let i = 0
+  while i < levels {
+    let b = lzs_bit(base + res)
+    res = (res << 1) | b
+    i = i + 1
+  }
+  return res - (1 << levels)
+}
+
+// Reverse bit tree: returns only the nbits low value (0 .. 2^n-1)
+fn lzs_rev_bits_low(base, nbits) {
+  let symbol = 0
+  let mi = 1
+  let k = 0
+  while k < nbits {
+    let b = lzs_bit(base + mi)
+    mi = (mi << 1) | b
+    if b != 0 {
+      symbol = symbol | (1 << k)
+    }
+    k = k + 1
+  }
+  return symbol
+}
+
+fn lzs_write_byte(bb) {
+  if LZS.out_pos >= LZS.out_len {
+    LZS.err = 1
+    return
+  }
+  bin.mset(LZS.out, LZS.out_pos, bb)
+  LZS.out_pos = LZS.out_pos + 1
+}
+
+fn lzs_prev_byte() {
+  if LZS.out_pos == 0 {
+    return 0
+  }
+  return bin.mget(LZS.out, LZS.out_pos - 1)
+}
+
+fn lzs_get_byte_at(pos) {
+  return bin.mget(LZS.out, pos)
+}
+
+// Decode length using LenCoder or RepLenCoder base offset
+fn lzs_decode_len(prob_base, pos_state) {
+  // LenChoice = 0, LenChoice2 = 1, LenLow = 2, LenMid = 130, LenHigh = 258
+  let bit = lzs_bit(prob_base + 0)
+  if bit == 0 {
+    let low = lzs_bit_tree(prob_base + 2 + (pos_state << 3), 3)
+    return low
+  }
+  bit = lzs_bit(prob_base + 1)
+  if bit == 0 {
+    let mid = lzs_bit_tree(prob_base + 130 + (pos_state << 3), 3)
+    return 8 + mid
+  }
+  let high = lzs_bit_tree(prob_base + 258, 8)
+  return 16 + high
+}
+
+fn lzs_decode_literal(pos_state) {
+  let prev = lzs_prev_byte()
+  let lit_state = ((LZS.out_pos & LZS.lit_pos_mask) << LZS.lc) + (prev >> (8 - LZS.lc))
+  let prob = 1846 + 768 * lit_state
+  let symbol = 1
+  if LZS.state >= 7 {
+    let mpos = LZS.out_pos - LZS.rep0
+    if mpos < 0 {
+      LZS.err = 1
+      return
+    }
+    let match_byte = lzs_get_byte_at(mpos)
+    while symbol < 0x100 {
+      match_byte = match_byte << 1
+      let bitm = match_byte & 0x100
+      let pidx = prob + 0x100 + bitm + symbol
+      let b = lzs_bit(pidx)
+      symbol = (symbol << 1) | b
+      if bitm != 0 {
+        if b == 0 {
+          break
+        }
+      } else {
+        if b != 0 {
+          break
+        }
+      }
+    }
+  }
+  while symbol < 0x100 {
+    let b2 = lzs_bit(prob + symbol)
+    symbol = (symbol << 1) | b2
+  }
+  let outb = symbol & 0xff
+  lzs_write_byte(outb)
+  // state update after literal
+  if LZS.state < 4 {
+    LZS.state = 0
+  } else {
+    if LZS.state < 10 {
+      LZS.state = LZS.state - 3
+    } else {
+      LZS.state = LZS.state - 6
+    }
+  }
+}
+
+fn lzs_copy_match(length) {
+  let r0 = LZS.rep0
+  let i = 0
+  while i < length {
+    if LZS.out_pos >= LZS.out_len {
+      break
+    }
+    let srcp = LZS.out_pos - r0
+    if srcp < 0 {
+      LZS.err = 1
+      return
+    }
+    let bb = bin.mget(LZS.out, srcp)
+    bin.mset(LZS.out, LZS.out_pos, bb)
+    LZS.out_pos = LZS.out_pos + 1
+    i = i + 1
+  }
+}
+
+fn lzs_decode_distance(len) {
+  // len is 0-based match length (before +2). Port of LzmaDec distance path.
+  let lps = len
+  if lps >= 4 {
+    lps = 3
+  }
+  // PosSlot base 432, 6-bit trees, stride 64
+  let pos_slot = lzs_bit_tree(432 + (lps << 6), 6)
+  let dist = 0
+  if pos_slot < 4 {
+    dist = pos_slot
+  } else {
+    let num_direct = (pos_slot >> 1) - 1
+    dist = 2 | (pos_slot & 1)
+    if pos_slot < 14 {
+      // SpecPos reverse tree
+      dist = dist << num_direct
+      let base = 688 + dist - pos_slot - 1
+      let low = lzs_rev_bits_low(base, num_direct)
+      dist = dist + low
+    } else {
+      // direct bits then Align
+      let nd = num_direct - 4
+      let k = 0
+      while k < nd {
+        lzs_norm()
+        LZS.range = u32_mask(LZS.range >> 1)
+        dist = dist << 1
+        if LZS.code >= LZS.range {
+          LZS.code = u32_mask(LZS.code - LZS.range)
+          dist = dist | 1
+        }
+        k = k + 1
+      }
+      dist = dist << 4
+      let al = lzs_rev_bits_low(802, 4)
+      dist = dist + al
+    }
+  }
+  // 0xffffffff end marker (as unsigned 32-bit)
+  if dist == 0xffffffff {
+    LZS.err = 2
+    return 0
+  }
+  // convert to 1-based rep0 used by copy: dicPos - rep0
+  let rep0 = dist + 1
+  LZS.rep0 = rep0
+  return rep0
+}
+
+fn lzs_handle_match(pos_state) {
+  // IsRep at 192 + state
+  let bit = lzs_bit(192 + LZS.state)
+  if bit == 0 {
+    // ----- new match (not rep) -----
+    LZS.rep3 = LZS.rep2
+    LZS.rep2 = LZS.rep1
+    LZS.rep1 = LZS.rep0
+    let length = lzs_decode_len(818, pos_state)
+    // state = (state < 7) ? 7 : 10
+    if LZS.state < 7 {
+      LZS.state = 7
+    } else {
+      LZS.state = 10
+    }
+    let d = lzs_decode_distance(length)
+    if LZS.err != 0 {
+      return
+    }
+    // rep0 is 1-based; must be <= out_pos
+    if d == 0 || d > LZS.out_pos {
+      LZS.err = 1
+      return
+    }
+    lzs_copy_match(length + 2)
+    return
+  }
+  // ----- rep match -----
+  bit = lzs_bit(204 + LZS.state)
+  if bit == 0 {
+    // IsRepG0
+    bit = lzs_bit(240 + (LZS.state << 4) + pos_state)
+    if bit == 0 {
+      // short rep1: copy 1 byte at rep0
+      if LZS.out_pos == 0 || LZS.rep0 == 0 || LZS.rep0 > LZS.out_pos {
+        LZS.err = 1
+        return
+      }
+      if LZS.state < 7 {
+        LZS.state = 9
+      } else {
+        LZS.state = 11
+      }
+      let srcp = LZS.out_pos - LZS.rep0
+      let bb = bin.mget(LZS.out, srcp)
+      lzs_write_byte(bb)
+      return
+    }
+    // long rep0
+  } else {
+    bit = lzs_bit(216 + LZS.state)
+    let distance = 0
+    if bit == 0 {
+      distance = LZS.rep1
+    } else {
+      bit = lzs_bit(228 + LZS.state)
+      if bit == 0 {
+        distance = LZS.rep2
+      } else {
+        distance = LZS.rep3
+        LZS.rep3 = LZS.rep2
+      }
+      LZS.rep2 = LZS.rep1
+    }
+    LZS.rep1 = LZS.rep0
+    LZS.rep0 = distance
+  }
+  if LZS.state < 7 {
+    LZS.state = 8
+  } else {
+    LZS.state = 11
+  }
+  let length2 = lzs_decode_len(1332, pos_state)
+  if LZS.rep0 == 0 || LZS.rep0 > LZS.out_pos {
+    LZS.err = 1
+    return
+  }
+  lzs_copy_match(length2 + 2)
+}
+
+fn lzs_main_loop() {
+  while LZS.out_pos < LZS.out_len {
+    if LZS.err != 0 {
+      return
+    }
+    let pos_state = LZS.out_pos & LZS.pos_mask
+    let bit = lzs_bit((LZS.state << 4) + pos_state)
+    if bit == 0 {
+      lzs_decode_literal(pos_state)
+    } else {
+      lzs_handle_match(pos_state)
+    }
+  }
+}
+
+// UPX 2-byte props LZMA decompress. Returns {ok, data, error}
+fn upx_lzma_decompress(src, dst_len) {
+  if bin.len(src) < 3 {
+    return {ok: false, data: null, error: "upx lzma: short input"}
+  }
+  let pb = bin.u8(src, 0) & 7
+  let lp = bin.u8(src, 1) >> 4
+  let lc = bin.u8(src, 1) & 15
+  if pb >= 5 || lp >= 5 || lc >= 9 {
+    return {ok: false, data: null, error: "upx lzma: bad props"}
+  }
+  if (bin.u8(src, 0) >> 3) != (lc + lp) {
+    return {ok: false, data: null, error: "upx lzma: props checksum mismatch"}
+  }
+  let payload = bin.slice(src, 2, bin.len(src))
+  return lzma_raw_decode(payload, dst_len, lc, lp, pb)
+}
+
+fn lzma_raw_decode(payload, dst_len, lc, lp, pb) {
+  if bin.len(payload) == 0 || dst_len <= 0 {
+    return {ok: false, data: null, error: "empty payload or bad size"}
+  }
+  let num_probs = 1846 + (768 << (lc + lp))
+  let probs = lzs_init_probs(num_probs)
+  let outb = bin.mbuf(dst_len)
+  LZS = {
+    src: payload,
+    in_pos: 0,
+    in_len: bin.len(payload),
+    range: 0xffffffff,
+    code: 0,
+    out: outb,
+    out_pos: 0,
+    out_len: dst_len,
+    rep0: 1,
+    rep1: 1,
+    rep2: 1,
+    rep3: 1,
+    state: 0,
+    probs: probs,
+    lc: lc,
+    lp: lp,
+    pb: pb,
+    pos_mask: (1 << pb) - 1,
+    lit_pos_mask: (1 << lp) - 1,
+    err: 0
+  }
+  lzs_rc_init()
+  if LZS.err != 0 {
+    return {ok: false, data: null, error: "lzma rc init failed"}
+  }
+  lzs_main_loop()
+  if LZS.err == 1 {
+    let partial = bin.mbytes(LZS.out)
+    let dump = ""
+    let di = 290
+    while di < LZS.out_pos && di < 310 {
+      dump = dump + bin.mget(LZS.out, di) + " "
+      di = di + 1
+    }
+    return {ok: false, data: null, error: "lzma data error at out=" + LZS.out_pos + " in=" + LZS.in_pos + " tail=" + dump + " rep0=" + LZS.rep0 + " st=" + LZS.state}
+  }
+  // err==2 is stream end; allow short if close enough
+  if LZS.out_pos < dst_len {
+    if LZS.out_pos < (dst_len * 9 / 10) {
+      return {ok: false, data: null, error: "lzma short out " + LZS.out_pos + " want " + dst_len}
+    }
+  }
+  let data = bin.mbytes(LZS.out)
+  if LZS.out_pos < dst_len {
+    data = bin.slice(data, 0, LZS.out_pos)
+  }
+  return {ok: true, data: data, error: ""}
+}
+
+// ============================= Unfilter =====================================
+
+fn unfilter_cto32_e8e9(data, cto) {
+  // Mutable path via mbuf
+  let n = bin.len(data)
+  let mb = bin.mbuf(n)
+  let i = 0
+  while i < n {
+    bin.mset(mb, i, bin.u8(data, i))
+    i = i + 1
+  }
+  let cto32 = u32_mask(cto << 24)
+  i = 0
+  while i + 5 <= n {
+    let op = bin.mget(mb, i)
+    if op == 0xe8 || op == 0xe9 {
+      let b0 = bin.mget(mb, i + 1)
+      let b1 = bin.mget(mb, i + 2)
+      let b2 = bin.mget(mb, i + 3)
+      let b3 = bin.mget(mb, i + 4)
+      let v = u32_mask(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+      let hi = (v >> 24) & 0xff
+      let rel = 0
+      if hi == cto || cto == 0 {
+        let bs = bswap32(v)
+        // signed-ish 32-bit subtract; keep low 32
+        rel = u32_mask(bs - (i + 5) - cto32)
+      } else {
+        rel = u32_mask(v - (i + 5))
+      }
+      bin.mset(mb, i + 1, rel & 0xff)
+      bin.mset(mb, i + 2, (rel >> 8) & 0xff)
+      bin.mset(mb, i + 3, (rel >> 16) & 0xff)
+      bin.mset(mb, i + 4, (rel >> 24) & 0xff)
+      i = i + 5
+    } else {
+      i = i + 1
+    }
+  }
+  return bin.mbytes(mb)
+}
+
+fn unfilter_region(obuf, start, count, filter, cto) {
+  if filter == 0 {
+    return obuf
+  }
+  if start < 0 || start >= bin.len(obuf) {
+    return obuf
+  }
+  let n = count
+  if start + n > bin.len(obuf) {
+    n = bin.len(obuf) - start
+  }
+  if n <= 0 {
+    return obuf
+  }
+  let slice = bin.slice(obuf, start, start + n)
+  let fixed = unfilter_cto32_e8e9(slice, cto)
+  return bin.write_at(obuf, start, fixed)
+}
+
+// ============================= PE rebuild ===================================
+
+fn put_u32le_at(buf, off, v) {
+  let b0 = bin.from_u8(v & 0xff)
+  let b1 = bin.from_u8((v >> 8) & 0xff)
+  let b2 = bin.from_u8((v >> 16) & 0xff)
+  let b3 = bin.from_u8((v >> 24) & 0xff)
+  let p = bin.concat(b0, b1, b2, b3)
+  return bin.write_at(buf, off, p)
+}
+
+fn rebuild_pe_from_upx_image(obuf, packed, filter, filter_cto) {
+  let u_len = bin.len(obuf)
+  if u_len < 8 {
+    return {ok: false, data: null, error: "obuf too short"}
+  }
+  let skip = bin.u32le(obuf, u_len - 4)
+  if skip < 0 || skip + 248 > u_len {
+    return {ok: false, data: null, error: "bad extra_info skip=" + skip}
+  }
+  let oh_size = 248
+  let oh = bin.slice(obuf, skip, skip + oh_size)
+  if bin.u8(oh, 0) != 0x50 || bin.u8(oh, 1) != 0x45 {
+    return {ok: false, data: null, error: "oh missing PE signature"}
+  }
+  let objs = bin.u16le(oh, 6)
+  if objs <= 0 || objs > 96 {
+    return {ok: false, data: null, error: "bad section count " + objs}
+  }
+  let sec_off = skip + oh_size
+  let sec_bytes = objs * 40
+  if sec_off + sec_bytes > u_len {
+    return {ok: false, data: null, error: "section table OOB"}
+  }
+  let sections = bin.slice(obuf, sec_off, sec_off + sec_bytes)
+  let code_size = bin.u32le(oh, 0x1c)
+  let code_base = bin.u32le(oh, 0x2c)
+  let file_align = bin.u32le(oh, 0x3c)
+  if file_align == 0 {
+    file_align = 0x200
+  }
+  let rvamin = bin.u32le(sections, 12)
+
+  // Unfilter code region
+  if filter != 0 {
+    let start = code_base - rvamin
+    if start >= 0 && start < u_len {
+      obuf = unfilter_region(obuf, start, code_size, filter, filter_cto)
+      // refresh oh/sections slices if needed — they are from original; OK (header area)
+      // But section data comes from obuf later — good that we update obuf.
+    }
+  }
+
+  let dos_stub = dos_stub_from_packed(packed)
+  let pe_off = bin.len(dos_stub)
+  if pe_off < 0x40 {
+    let pad = bin.zeros(0x40 - pe_off)
+    dos_stub = bin.concat(dos_stub, pad)
+    pe_off = 0x40
+  }
+  dos_stub = put_u32le_at(dos_stub, 0x3c, pe_off)
+
+  // Parse section infos
+  let first_raw = 0
+  let file_size = 0
+  let i = 0
+  while i < objs {
+    let o = i * 40
+    let rawsize = bin.u32le(sections, o + 16)
+    let rawptr = bin.u32le(sections, o + 20)
+    let vsize = bin.u32le(sections, o + 8)
+    if rawptr != 0 {
+      if first_raw == 0 || rawptr < first_raw {
+        first_raw = rawptr
+      }
+      let rs = rawsize
+      if rs == 0 {
+        rs = align_up(vsize, file_align)
+      } else {
+        rs = align_up(rs, file_align)
+      }
+      let end = rawptr + rs
+      if end > file_size {
+        file_size = end
+      }
+    }
+    i = i + 1
+  }
+  let body_start = pe_off + oh_size + sec_bytes
+  if first_raw == 0 {
+    first_raw = align_up(body_start, file_align)
+  }
+  if file_size < first_raw {
+    file_size = first_raw + 0x1000
+  }
+
+  let out = bin.zeros(file_size)
+  out = bin.write_at(out, 0, dos_stub)
+  out = bin.write_at(out, pe_off, oh)
+  out = bin.write_at(out, pe_off + oh_size, sections)
+  // clear checksum at pe_off+0x58
+  if pe_off + 0x58 + 4 <= bin.len(out) {
+    out = put_u32le_at(out, pe_off + 0x58, 0)
+  }
+
+  i = 0
+  while i < objs {
+    let o2 = i * 40
+    let vsize2 = bin.u32le(sections, o2 + 8)
+    let vaddr2 = bin.u32le(sections, o2 + 12)
+    let rawsize2 = bin.u32le(sections, o2 + 16)
+    let rawptr2 = bin.u32le(sections, o2 + 20)
+    if rawptr2 != 0 {
+      let src_off = vaddr2 - rvamin
+      if src_off >= 0 && src_off < bin.len(obuf) {
+        let nn = rawsize2
+        if nn == 0 {
+          nn = vsize2
+        }
+        if src_off + nn > bin.len(obuf) {
+          nn = bin.len(obuf) - src_off
+        }
+        if nn > 0 {
+          let chunk = bin.slice(obuf, src_off, src_off + nn)
+          let need = rawptr2 + nn
+          if need > bin.len(out) {
+            let bigger = bin.zeros(need)
+            bigger = bin.write_at(bigger, 0, out)
+            out = bigger
+          }
+          out = bin.write_at(out, rawptr2, chunk)
+        }
+      }
+    }
+    i = i + 1
+  }
+
+  // Overlay from packed
+  let pend = pe_image_end(packed)
+  if pend > 0 && pend < bin.len(packed) {
+    let ov = bin.slice(packed, pend, bin.len(packed))
+    out = bin.concat(out, ov)
+  }
+
+  if !has_mz(out) {
+    return {ok: false, data: null, error: "rebuild failed: no MZ"}
+  }
+  return {ok: true, data: out, error: ""}
+}
+
+// ============================= Unpack =======================================
+
+fn unpack(data) {
+  if !has_mz(data) {
+    return {ok: false, error: "not MZ", data: null, note: "", size: 0}
+  }
+  if is_upx(data) != true {
+    return {ok: false, error: "not UPX packed", data: null, note: "", size: 0}
+  }
+  let ph = find_pack_header(data)
+  if ph == null {
+    return {ok: false, error: "UPX pack header not found", data: null, note: "", size: 0}
+  }
+  let upx1 = pe_find_section(data, "UPX1")
+  if upx1 == null {
+    return {ok: false, error: "missing UPX1 section", data: null, note: "", size: 0}
+  }
+  if upx1.rawptr + upx1.rawsize > bin.len(data) {
+    return {ok: false, error: "UPX1 out of range", data: null, note: "", size: 0}
+  }
+  let sec_data = bin.slice(data, upx1.rawptr, upx1.rawptr + upx1.rawsize)
+  let c_len = ph.c_len
+  let u_len = ph.u_len
+  if c_len <= 0 || c_len > bin.len(sec_data) {
+    c_len = bin.len(sec_data)
+    if c_len > 0x1000 {
+      c_len = c_len - 0x800
+    }
+  }
+  if u_len <= 0 {
+    let u0 = pe_find_section(data, "UPX0")
+    if u0 != null {
+      u_len = u0.vsize + upx1.vsize
+    } else {
+      u_len = c_len * 4
+    }
+  }
+  let comp = bin.slice(sec_data, 0, c_len)
+
+  if ph.method != 14 {
+    return {
+      ok: false,
+      error: "NRV method " + ph.method + " not implemented in pure GLTK (LZMA only)",
+      data: null,
+      note: method_name(ph.method),
+      size: 0
+    }
+  }
+
+  let dec = upx_lzma_decompress(comp, u_len)
+  if dec.ok != true {
+    return {ok: false, error: "decompress: " + dec.error, data: null, note: "", size: 0}
+  }
+  let raw = dec.data
+
+  if has_mz(raw) {
+    return {
+      ok: true,
+      data: raw,
+      error: "",
+      note: "unpacked method=LZMA u_len=" + u_len + " out=" + bin.len(raw),
+      size: bin.len(raw)
+    }
+  }
+
+  let reb = rebuild_pe_from_upx_image(raw, data, ph.filter, ph.filter_cto)
+  if reb.ok == true && has_mz(reb.data) {
+    return {
+      ok: true,
+      data: reb.data,
+      error: "",
+      note: "unpacked+rebuild method=LZMA u_len=" + u_len + " out=" + bin.len(reb.data),
+      size: bin.len(reb.data)
+    }
+  }
+
+  // search MZ in raw
+  let j = 0
+  let rn = bin.len(raw)
+  if rn > 0x1000 {
+    rn = 0x1000
+  }
+  while j < rn {
+    if bin.u8(raw, j) == 0x4d && j + 1 < bin.len(raw) && bin.u8(raw, j + 1) == 0x5a {
+      let shifted = bin.slice(raw, j, bin.len(raw))
+      if has_mz(shifted) {
+        return {
+          ok: true,
+          data: shifted,
+          error: "",
+          note: "unpacked (shifted to MZ)",
+          size: bin.len(shifted)
+        }
+      }
+    }
+    j = j + 1
+  }
+
+  let note = "decompressed but rebuild failed"
+  if reb.error != "" {
+    note = note + ": " + reb.error
+  }
+  return {
+    ok: true,
+    data: raw,
+    error: "",
+    note: note + "; returning raw image",
+    size: bin.len(raw)
+  }
+}

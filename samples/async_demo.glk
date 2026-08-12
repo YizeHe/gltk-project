@@ -1,0 +1,42 @@
+// async_demo.glk — sync/async primitives for GrokLang
+import async, out
+
+fn work(n) {
+    async.sleep(50)
+    return n * n
+}
+
+fn main(args) {
+    out.println("=== async demo ===")
+
+    // parallel map
+    let items = [1, 2, 3, 4, 5]
+    let squares = async.parallel(work, items)
+    out.println("parallel squares:", squares[0], squares[1], squares[2], squares[3], squares[4])
+
+    // spawn + await
+    let f1 = async.spawn(work, [10])
+    let f2 = async.spawn(work, [11])
+    out.println("ready f1?", async.ready(f1))
+    let r1 = async.await(f1)
+    let r2 = async.await(f2)
+    out.println("spawn results", r1, r2)
+
+    // channel
+    let ch = async.channel(2)
+    async.send(ch, "hello")
+    async.send(ch, "world")
+    let a = async.recv(ch)
+    let b = async.recv(ch)
+    out.println("chan", a.value, b.value)
+    async.close(ch)
+
+    // mutex
+    let m = async.mutex()
+    async.lock(m)
+    out.println("locked")
+    async.unlock(m)
+
+    out.println("=== done ===")
+    return 0
+}

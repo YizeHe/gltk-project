@@ -1,0 +1,74 @@
+// ch04_03_maps.glk — 映射基础、嵌套、作为记录/字典
+// .\gltk.exe run learn\examples\ch04_03_maps.glk
+
+import out, json
+
+fn main(args) {
+  // 字面量（键：标识符或字符串）
+  let pe = {
+    machine: 0x8664,
+    "entry": 0x1000,
+    name: "sample.exe"
+  }
+  out.println("name=", pe.name, " entry=", pe.entry, " machine=", pe.machine)
+  out.println("len(pe)=", len(pe))
+
+  // 点字段 vs 下标
+  out.println(pe["name"])
+  pe.sections = 5
+  pe["sections"] = pe.sections + 1
+  out.println("sections=", pe.sections)
+
+  // 空 map 再赋值（变量安全）
+  let host = "api.local"
+  let cfg = {}
+  cfg.host = host
+  cfg.port = 443
+  cfg.tls = true
+  out.println("cfg host=", cfg.host, " port=", cfg.port)
+
+  // 嵌套
+  let report = {
+    ok: true,
+    meta: {tool: "gltk", ver: 5},
+    hits: [0x100, 0x200]
+  }
+  out.println("tool=", report.meta.tool, " first hit=", report.hits[0])
+
+  // 遍历键
+  out.println("-- keys --")
+  for k in cfg {
+    out.println(" ", k, "=", cfg[k])
+  }
+
+  // 用 map 做计数器 / 集合
+  let words = ["pe", "fs", "pe", "out", "fs", "pe"]
+  let freq = {}
+  for w in words {
+    if freq[w] {
+      freq[w] = freq[w] + 1
+    } else {
+      freq[w] = 1
+    }
+  }
+  out.println("-- word freq --")
+  for k in freq {
+    out.println(" ", k, "->", freq[k])
+  }
+
+  // 存在性：无真值（缺省键读出来是 null/假）
+  if freq["pe"] {
+    out.println("pe present, count=", freq["pe"])
+  }
+  if !freq["bin"] {
+    out.println("bin not present")
+  }
+
+  // JSON 往返（配置/报告常用）
+  let s = json.stringify(report)
+  out.println("json:", s)
+  let back = json.parse(s)
+  out.println("roundtrip ok=", back.ok, " ver=", back.meta.ver)
+
+  return 0
+}

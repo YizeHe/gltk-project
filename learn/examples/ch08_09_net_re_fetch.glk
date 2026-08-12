@@ -1,0 +1,39 @@
+// ch08_09_net_re_fetch.glk — 网络 + 逆向：下载后做 MZ/哈希 triage
+// .\gltk.exe run learn\examples\ch08_09_net_re_fetch.glk
+// 下载 httpbin 小文件并分析；可改 URL 指向你有权分析的样本 URL
+
+import out, http, fs, bin, crypto
+
+fn triage_bytes(data, label) {
+  out.println("==", label, "==")
+  out.println("len=", bin.len(data))
+  out.println("md5=", crypto.md5_hex(data))
+  if bin.len(data) >= 2 {
+    let mz = bin.u16le(data, 0) == 0x5A4D
+    out.println("mz=", mz)
+  }
+}
+
+fn main(args) {
+  let url = "https://httpbin.org/bytes/64"
+  if len(args) > 0 { url = args[0] }
+
+  fs.mkdir_all("learn/examples/_tmp_ch08")
+  let path = "learn/examples/_tmp_ch08/download.bin"
+
+  out.println("download", url)
+  let dl = http.download(url, path, {timeout: 30, user_agent: "gltk-ch08-re"})
+  out.println("ok=", dl.ok, " bytes=", dl.bytes, " err=", dl.error)
+  if !dl.ok {
+    return 1
+  }
+
+  let data = fs.read_bytes(path)
+  triage_bytes(data, path)
+
+  // 本地再写一份报告
+  let rep = path + ".txt"
+  fs.write_text(rep, "url=" + url + "\nmd5=" + crypto.md5_hex(data) + "\n")
+  out.println("wrote", rep)
+  return 0
+}

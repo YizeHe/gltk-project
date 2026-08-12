@@ -1,0 +1,25 @@
+// ch08_03_httpx_session.glk — stdlib httpx 会话
+// .\gltk.exe run learn\examples\ch08_03_httpx_session.glk
+
+import out
+import "stdlib/httpx.glk" as httpx
+
+fn main(args) {
+  let s = httpx.session_new("https://httpbin.org", {
+    "Accept": "application/json"
+  })
+  // session 字段可改
+  s.timeout = 25
+  s.user_agent = "gltk-httpx-ch08"
+  s.retries = 1
+
+  out.println("session base=", s.base)
+
+  let g = httpx.get_json(s, "/get")
+  out.println("get_json ok=", g.ok, " status=", g.status)
+
+  let p = httpx.post_json(s, "/post", {hello: "ch08", n: 7})
+  out.println("post_json ok=", p.ok, " status=", p.status)
+
+  return 0
+}

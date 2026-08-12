@@ -1,0 +1,52 @@
+// learn/examples/ch02_02_numbers.glk
+// 第 2 章：整数、十六进制、浮点与算术
+// 运行: .\gltk.exe run learn\examples\ch02_02_numbers.glk
+
+import out
+
+fn main(args) {
+  // ---- 整数（十进制）----
+  let a = 0
+  let b = 42
+  let c = -7
+  out.println("a b c =", a, b, c)
+
+  // ---- 十六进制 ----
+  let hx = 0xFF
+  let pe = 0x4D5A // 'MZ' 在 PE 里很常见
+  out.println("0xFF =", hx)
+  out.println("0x4D5A =", pe)
+
+  // ---- 浮点 ----
+  let f1 = 3.14
+  let f2 = 1e3
+  let f3 = 2.5e-1
+  out.println("floats =", f1, f2, f3)
+  out.println("typeof 1 =", typeof(1), " typeof 1.0 =", typeof(1.0))
+
+  // ---- 算术 ----
+  out.println("3+2 =", 3 + 2)
+  out.println("3-2 =", 3 - 2)
+  out.println("3*2 =", 3 * 2)
+  // 两个 int 相除：整除（向零截断）
+  out.println("7/2 =", 7 / 2)
+  out.println("7%2 =", 7 % 2)
+  // 有浮点参与时按浮点算
+  out.println("7.0/2 =", 7.0 / 2)
+  out.println("7/2.0 =", 7 / 2.0)
+
+  // ---- 位运算（整数）----
+  out.println("5 & 3 =", 5 & 3)
+  out.println("5 | 3 =", 5 | 3)
+  out.println("5 ^ 3 =", 5 ^ 3)
+  out.println("~0 low8 注意实现宽度，示例 ~1 =", ~1)
+  out.println("1 << 4 =", 1 << 4)
+  out.println("16 >> 2 =", 16 >> 2)
+
+  // ---- 一元 ----
+  out.println("-b =", -b)
+  out.println("!true =", !true)
+  out.println("!false =", !false)
+
+  return 0
+}

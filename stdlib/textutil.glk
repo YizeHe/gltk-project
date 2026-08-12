@@ -1,0 +1,82 @@
+// textutil.glk — text processing helpers for source analysis.
+// Works with .glk, .js, .json, .ini, and generic text.
+//
+// import "stdlib/textutil.glk" as textutil
+
+import re, str
+
+// lines splits text into an array of lines (strips trailing \r).
+fn lines(text) {
+    return re.split("\\r?\\n", text)
+}
+
+// strip_line_comments removes // comments (preserves strings approximately).
+fn strip_line_comments(text) {
+    return re.replace("//[^\\n]*", text, "")
+}
+
+// strip_block_comments removes /* ... */ comments.
+fn strip_block_comments(text) {
+    return re.replace("/\\*[^*]*\\*+(?:[^/*][^*]*\\*+)*/", text, "")
+}
+
+// strip_all_comments removes both line and block comments.
+fn strip_all_comments(text) {
+    let t = strip_block_comments(text)
+    return strip_line_comments(t)
+}
+
+// indent prepends `prefix` to each non-empty line.
+fn indent(text, prefix) {
+    let lns = lines(text)
+    let result = ""
+    let i = 0
+    while i < len(lns) {
+        let line = lns[i]
+        if str.len(str.trim(line)) > 0 {
+            result = result + prefix + line + "\n"
+        } else {
+            result = result + "\n"
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// count_lines returns the number of lines in text.
+fn count_lines(text) {
+    return len(lines(text))
+}
+
+// grep returns lines matching a regex pattern (uses re multiline matching).
+fn grep(pattern, text) {
+    // Use multiline mode: match entire lines that contain the pattern
+    return re.find_all("(?m)^[^\n]*(?:" + pattern + ")[^\n]*$", text)
+}
+
+// grep_count returns the count of lines matching a pattern.
+fn grep_count(pattern, text) {
+    return len(grep(pattern, text))
+}
+
+// truncate returns the first `max_lines` lines joined back.
+fn truncate(text, max_lines) {
+    let lns = lines(text)
+    let result = ""
+    let i = 0
+    while i < max_lines && i < len(lns) {
+        result = result + lns[i] + "\n"
+        i = i + 1
+    }
+    return result
+}
+
+// word_count returns a rough word count (whitespace-separated tokens).
+fn word_count(text) {
+    let trimmed = str.trim(text)
+    if str.len(trimmed) == 0 {
+        return 0
+    }
+    let words = re.split("\\s+", trimmed)
+    return len(words)
+}

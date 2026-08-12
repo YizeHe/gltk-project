@@ -1,0 +1,33 @@
+// ch05_02_async_spawn.glk — spawn / await / ready / sleep
+// .\gltk.exe run learn\examples\ch05_02_async_spawn.glk
+
+import out, async
+
+fn slow_square(n) {
+  async.sleep(30)
+  return n * n
+}
+
+fn main(args) {
+  out.println("=== spawn/await ===")
+
+  let f1 = async.spawn(slow_square, [3])
+  let f2 = async.spawn(slow_square, [4])
+  out.println("ready f1 early?", async.ready(f1))
+
+  let a = async.await(f1)
+  let b = async.await(f2)
+  out.println("3^2=", a, " 4^2=", b)
+  out.println("ready f1 after?", async.ready(f1))
+
+  // await_all
+  let f3 = async.spawn(slow_square, [5])
+  let f4 = async.spawn(slow_square, [6])
+  let all = async.await_all([f3, f4])
+  out.println("await_all:", all[0], all[1])
+
+  out.println("sleep 20ms...")
+  async.sleep(20)
+  out.println("done")
+  return 0
+}

@@ -1,0 +1,165 @@
+// re_triage.glk — broad static RE triage helpers (GrokLang 1.0)
+// import "stdlib/re_triage.glk" as rt
+//
+// Covers common formats: PE/NSIS/MSI/asar/zip/mz, string keyword classes,
+// overlay/image_end, and report scaffolding. Pure static; never executes samples.
+
+import pe, fs, out, str, file, crypto, archive
+
+fn push_line(s, line) {
+  return s + line + "\n"
+}
+
+// classify_keywords returns category string for RE text (or "")
+fn classify_keywords(t) {
+  let low = str.lower(t)
+  if str.contains(low, "http://") || str.contains(low, "https://") || str.contains(low, "wss://") {
+    return "net"
+  }
+  if str.contains(low, "md5") || str.contains(low, "sha1") || str.contains(low, "sha256") || str.contains(low, "crc32") || str.contains(low, "checksum") || str.contains(low, "hash") {
+    return "hash"
+  }
+  if str.contains(low, "forceupdate") || str.contains(low, "version.json") || str.contains(low, "hotupdate") || str.contains(low, "min_version") || str.contains(low, "checkupdate") {
+    return "update"
+  }
+  if str.contains(low, "login") || str.contains(low, "openid") || str.contains(low, "userid") || str.contains(low, "token") || str.contains(low, "account") || str.contains(low, "oauth") {
+    return "account"
+  }
+  if str.contains(low, "mapid") || str.contains(low, "owid") || str.contains(low, "mapdata") || str.contains(low, "loadworld") || str.contains(low, "ugc") {
+    return "map"
+  }
+  if str.contains(low, "nullsoft") || str.contains(low, "inno") || str.contains(low, "electron") || str.contains(low, "app.asar") || str.contains(low, "upx") || str.contains(low, "autohotkey") {
+    return "pack"
+  }
+  if str.contains(low, "unity") || str.contains(low, "cocos") || str.contains(low, "unreal") || str.contains(low, "lua") || str.contains(low, "sqlite") {
+    return "engine"
+  }
+  return ""
+}
+
+// pe_brief returns a multi-line summary string for a PE path
+fn pe_brief(path) {
+  let info = pe.summary(path)
+  if typeof(info) == "null" {
+    return "pe.summary null\n"
+  }
+  if info.ok == false {
+    return "pe error: " + info.error + "\n"
+  }
+  let s = ""
+  s = push_line(s, "machine=" + info.machine_name + " subsystem=" + info.subsystem_name)
+  s = push_line(s, "entry=" + info.entry + " sections=" + info.section_count + " imports=" + info.import_count)
+  s = push_line(s, "overlay_size=" + info.overlay_size + " image_end=" + info.image_end)
+  if typeof(info.markers) == "array" {
+    let i = 0
+    while i < len(info.markers) {
+      s = push_line(s, "marker=" + info.markers[i])
+      i = i + 1
+    }
+  }
+  return s
+}
+
+// detect_kind returns high-level kind string for path
+fn detect_kind(path) {
+  let det = file.detect_path(path)
+  if det.format == "pe" || det.format == "mz" {
+    if det.subtype == "nsis" {
+      return "nsis"
+    }
+    return "pe"
+  }
+  if det.format == "cfb" {
+    return "msi"
+  }
+  if det.format == "zip" || det.subtype == "zip" {
+    return "zip"
+  }
+  return det.format
+}
+
+// fingerprint first 1MiB hashes
+fn fingerprint(path) {
+  let head = fs.head(path, 1048576)
+  let s = ""
+  s = push_line(s, "size=" + fs.file_size(path))
+  s = push_line(s, "md5_1m=" + crypto.md5_hex(head))
+  s = push_line(s, "sha256_1m=" + crypto.sha256_hex(head))
+  return s
+}
+
+// nsis_extract_to uses archive module (needs full 7z for NSIS)
+fn nsis_extract_to(path, out_dir) {
+  fs.mkdir_all(out_dir)
+  return archive.extract(path, out_dir)
+}
+
+// scan_file_keywords scans path (head for large files) into category map of text blobs
+// Returns report string (compatible without array push if needed)
+fn scan_file_keywords(path, max_hits_per_cat) {
+  let sz = fs.file_size(path)
+  let data = null
+  if sz > 4 * 1048576 {
+    data = fs.head(path, 2 * 1048576)
+  } else {
+    data = fs.read_bytes(path)
+  }
+  let hits = str.scan(data, 5, 12000)
+  let report = ""
+  let cats = ["net", "hash", "update", "account", "map", "pack", "engine"]
+  // counts via map
+  let counts = {}
+  let i = 0
+  while i < len(cats) {
+    counts[cats[i]] = 0
+    i = i + 1
+  }
+  i = 0
+  while i < len(hits) {
+    let t = hits[i].text
+    let c = classify_keywords(t)
+    if c != "" {
+      let n = counts[c]
+      if typeof(n) == "null" {
+        n = 0
+      }
+      if n < max_hits_per_cat {
+        t = str.replace(t, "\n", " ")
+        if len(t) > 200 {
+          t = str.slice(t, 0, 200)
+        }
+        report = report + "[" + c + "] " + t + "\n"
+        counts[c] = n + 1
+      }
+    }
+    i = i + 1
+  }
+  return report
+}
+
+// triage_one full pipeline for a single path → markdown section
+fn triage_one(path) {
+  let r = ""
+  r = push_line(r, "## `" + path + "`")
+  if !fs.exists(path) {
+    return push_line(r, "- missing")
+  }
+  let det = file.detect_path(path)
+  r = push_line(r, "- format: `" + det.format + "` / `" + det.subtype + "` size=" + det.size)
+  r = r + fingerprint(path)
+  let kind = detect_kind(path)
+  r = push_line(r, "- kind: **" + kind + "**")
+  if kind == "pe" || kind == "nsis" {
+    r = r + pe_brief(path)
+  }
+  r = push_line(r, "### keyword hits")
+  r = r + scan_file_keywords(path, 25)
+  r = push_line(r, "")
+  return r
+}
+
+// write_report writes markdown to out_path
+fn write_report(out_path, body) {
+  fs.write_text(out_path, "# GLTK RE Triage Report\n\n" + body)
+  return out_path
+}

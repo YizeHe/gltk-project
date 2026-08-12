@@ -1,0 +1,9 @@
+// samples/use_lib.glk — path import of a .glk library
+import out
+import "libs/helpers.glk" as helpers
+
+fn main(args) {
+  out.println(helpers.double(21))
+  out.println(helpers.add(20, 22))
+  return 0
+}

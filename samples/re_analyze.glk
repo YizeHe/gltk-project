@@ -1,0 +1,304 @@
+// re_analyze.glk — reverse triage using only GrokLang + GLVM
+// Usage:
+//   gltk run samples/re_analyze.glk -- <file>
+//   gltk run samples/re_analyze.glk -- <dir>   # all files in directory
+import pe, fs, out, str, file, msi, crypto
+
+fn push(s, line) {
+    return s + line + "\n"
+}
+
+fn analyze_msi(path, report) {
+    out.println("--- MSI/CFB ---")
+    report = push(report, "### MSI / OLE Compound")
+    let info = msi.info(path)
+    if info.ok {
+        out.println("likely_msi=", info.likely_msi, " streams=", info.stream_count)
+        report = push(report, "- **likely_msi**: " + info.likely_msi)
+        report = push(report, "- **stream_count**: " + info.stream_count)
+        report = push(report, "- **sector_size**: " + info.sector_size)
+        report = push(report, "- **streams**:")
+        let names = info.stream_names
+        let i = 0
+        let lim = len(names)
+        if lim > 40 { lim = 40 }
+        while i < lim {
+            out.println("  stream:", names[i])
+            report = push(report, "  - `" + names[i] + "`")
+            i = i + 1
+        }
+        let head = fs.head(path, 2097152)
+        let hits = str.scan(head, 5, 300)
+        report = push(report, "- **interesting strings**:")
+        let shown = 0
+        i = 0
+        while i < len(hits) {
+            if shown >= 25 { break }
+            let t = hits[i].text
+            if str.contains(t, "KeePass") || str.contains(t, "Product") || str.contains(t, "Version") || str.contains(t, "http") || str.contains(t, "Copyright") || str.contains(t, "Publisher") || str.contains(t, "XC") {
+                out.println("  *", t)
+                report = push(report, "  - " + t)
+                shown = shown + 1
+            }
+            i = i + 1
+        }
+        report = push(report, "- **conclusion**: Windows Installer (OLE CFB/MSI). Not PE; extract with msiexec admin install or lessmsi/dark.")
+    } else {
+        report = push(report, "- **error**: " + info.error)
+    }
+    return report
+}
+
+fn pe_conclude(info) {
+    let m = ""
+    if typeof(info.markers) == "array" {
+        let i = 0
+        while i < len(info.markers) {
+            m = m + " " + info.markers[i]
+            i = i + 1
+        }
+    }
+    if str.contains(m, "Nullsoft") {
+        return "NSIS installer/stub; payload often in PE overlay. Unpack with 7-Zip."
+    }
+    if str.contains(m, "Inno") {
+        return "Inno Setup installer; use innounp/innoextract."
+    }
+    if str.contains(m, "Electron") || str.contains(m, "app.asar") || str.contains(m, "chrome_elf") {
+        return "Electron/Chromium app or installer; search app.asar after unpack."
+    }
+    if str.contains(m, "WinRAR") || str.contains(m, "Rar!") {
+        return "WinRAR binary or SFX; RAR payload may sit in overlay."
+    }
+    if str.contains(m, "bat2exe") || str.contains(m, "Bat To Exe") {
+        return "Bat-to-Exe converter output; recover script from resources/overlay."
+    }
+    if str.contains(m, "AutoHotkey") {
+        return "AutoHotkey compiled EXE; check RCDATA for script (ScriptGuard possible)."
+    }
+    if info.overlay_size > 100000 {
+        return "PE with large overlay (" + info.overlay_size + " bytes) — installer/SFX/packed payload likely."
+    }
+    return "PE " + info.machine_name + " / " + info.subsystem_name + "; review imports & resources."
+}
+
+fn analyze_pe(path, fsize, report) {
+    out.println("--- PE ---")
+    report = push(report, "### PE analysis")
+    let info = null
+    if fsize > 20971520 {
+        out.println("large file -> pe.summary")
+        info = pe.summary(path)
+    } else {
+        info = pe.parse_file(path, true)
+    }
+    if typeof(info) == "null" {
+        return push(report, "- **error**: pe parse null")
+    }
+    if info.ok == false {
+        out.println("pe error:", info.error)
+        return push(report, "- **error**: " + info.error)
+    }
+
+    out.println("machine=", info.machine_name, " subsystem=", info.subsystem_name, " entry=", info.entry)
+    out.println("sections=", info.section_count, " imports=", info.import_count, " overlay=", info.overlay_size)
+
+    report = push(report, "- **arch**: " + info.machine_name + " pe32+=" + info.pe32plus)
+    report = push(report, "- **subsystem**: " + info.subsystem_name)
+    report = push(report, "- **entry RVA**: " + info.entry)
+    report = push(report, "- **timestamp**: " + info.timestamp)
+    report = push(report, "- **sections**: " + info.section_count)
+    report = push(report, "- **import DLLs**: " + info.import_count)
+    report = push(report, "- **exports**: " + info.export_count)
+    report = push(report, "- **overlay_size**: " + info.overlay_size)
+    report = push(report, "- **image_end**: " + info.image_end)
+    if info.partial == true {
+        report = push(report, "- **partial_read**: head=" + info.read_head + " tail=" + info.read_tail)
+    }
+
+    report = push(report, "- **section table**:")
+    let secs = info.sections
+    let i = 0
+    while i < len(secs) {
+        let s = secs[i]
+        out.println("  ", s.name, " rawsize=", s.rawsize)
+        report = push(report, "  - `" + s.name + "` vsize=" + s.vsize + " rawsize=" + s.rawsize + " rawptr=" + s.rawptr)
+        i = i + 1
+    }
+
+    let imps = info.imports
+    if len(imps) > 0 {
+        report = push(report, "- **imports**:")
+        i = 0
+        let lim = len(imps)
+        if lim > 25 { lim = 25 }
+        while i < lim {
+            let d = imps[i]
+            out.println("  dll", d.dll, d.count)
+            report = push(report, "  - `" + d.dll + "` (" + d.count + ")")
+            i = i + 1
+        }
+    }
+
+    let res = info.resources
+    if len(res) > 0 {
+        let rcdata = 0
+        let ver = 0
+        let man = 0
+        i = 0
+        while i < len(res) {
+            let r = res[i]
+            if r.type == "RCDATA" { rcdata = rcdata + 1 }
+            if r.type == "VERSION" { ver = ver + 1 }
+            if r.type == "MANIFEST" { man = man + 1 }
+            i = i + 1
+        }
+        report = push(report, "- **resources**: total=" + len(res) + " RCDATA=" + rcdata + " VERSION=" + ver + " MANIFEST=" + man)
+    }
+
+    if typeof(info.markers) == "array" {
+        report = push(report, "- **markers**:")
+        i = 0
+        while i < len(info.markers) {
+            report = push(report, "  - `" + info.markers[i] + "`")
+            i = i + 1
+        }
+    }
+
+    if typeof(info.interesting) == "array" {
+        report = push(report, "- **interesting strings**:")
+        i = 0
+        while i < len(info.interesting) {
+            let h = info.interesting[i]
+            out.println("  *", h.text)
+            report = push(report, "  - " + h.text)
+            i = i + 1
+        }
+    } else {
+        let head = fs.head(path, 2097152)
+        let hits = str.scan(head, 6, 100)
+        report = push(report, "- **string sample**:")
+        i = 0
+        let shown = 0
+        while i < len(hits) {
+            if shown >= 15 { break }
+            let t = hits[i].text
+            if str.contains(t, "http") || str.contains(t, ".dll") || str.contains(t, "Install") || str.contains(t, "Setup") || str.contains(t, "RAR") || str.contains(t, "bat") || str.contains(t, "Electron") || str.contains(t, "Nullsoft") || str.contains(t, "Inno") || str.contains(t, "Copyright") {
+                report = push(report, "  - " + t)
+                shown = shown + 1
+            }
+            i = i + 1
+        }
+    }
+
+    let conclusion = pe_conclude(info)
+    out.println("CONCLUSION:", conclusion)
+    report = push(report, "- **conclusion**: " + conclusion)
+    report = push(report, "")
+    return report
+}
+
+fn analyze_one(path, report) {
+    out.println("========")
+    out.println("FILE:", path)
+    report = push(report, "## `" + path + "`")
+    report = push(report, "")
+
+    if !fs.exists(path) {
+        out.println("MISSING")
+        return push(report, "- **error**: not found")
+    }
+
+    let det = file.detect_path(path)
+    let fsize = det.size
+    out.println("size=", fsize, " format=", det.format, " subtype=", det.subtype)
+    out.println("magic=", det.magic)
+    report = push(report, "- **size**: " + fsize + " bytes")
+    report = push(report, "- **format**: `" + det.format + "` / subtype=`" + det.subtype + "`")
+    report = push(report, "- **magic**: `" + det.magic + "`")
+
+    let markers = det.markers
+    if len(markers) > 0 {
+        report = push(report, "- **detect markers**:")
+        let i = 0
+        while i < len(markers) {
+            out.println("  marker:", markers[i])
+            report = push(report, "  - `" + markers[i] + "`")
+            i = i + 1
+        }
+    }
+
+    let head = fs.head(path, 1048576)
+    let md = crypto.md5_hex(head)
+    let sha = crypto.sha256_hex(head)
+    out.println("md5(head1M)=", md)
+    report = push(report, "- **md5(first 1MiB)**: `" + md + "`")
+    report = push(report, "- **sha256(first 1MiB)**: `" + sha + "`")
+
+    if det.format == "cfb" {
+        report = analyze_msi(path, report)
+        report = push(report, "")
+        return report
+    }
+    if det.format == "pe" || det.format == "mz" {
+        return analyze_pe(path, fsize, report)
+    }
+    report = push(report, "- **note**: unhandled format; head strings only")
+    let hits = str.scan(head, 6, 20)
+    let j = 0
+    while j < len(hits) {
+        report = push(report, "  - " + hits[j].text)
+        j = j + 1
+    }
+    report = push(report, "")
+    return report
+}
+
+fn main(args) {
+    if len(args) < 1 {
+        out.println("usage: gltk run re_analyze.glk -- <file> [report.md]")
+        out.println("       gltk run re_analyze.glk -- --batch <dir> [report.md]")
+        return 1
+    }
+
+    let report = "# GrokLangToolKit Reverse Engineering Report\n\n"
+    report = report + "Pipeline: `samples/re_analyze.glk` on GLVM (`file`/`pe`/`msi`/`str`/`crypto`/`fs`).\n\n"
+    let report_path = "testfile/RE_REPORT.md"
+
+    // Batch mode: --batch <dir>
+    if args[0] == "--batch" {
+        if len(args) < 2 {
+            out.println("need directory after --batch")
+            return 1
+        }
+        let dir = args[1]
+        if len(args) >= 3 {
+            report_path = args[2]
+        }
+        let listing = fs.list_dir(dir)
+        let i = 0
+        while i < len(listing) {
+            let name = listing[i]
+            if !str.contains(name, "RE_REPORT") && !str.contains(name, ".md") {
+                let p = dir + "\\" + name
+                let sz = fs.file_size(p)
+                if sz > 0 {
+                    report = analyze_one(p, report)
+                }
+            }
+            i = i + 1
+        }
+    } else {
+        let target = args[0]
+        if len(args) >= 2 {
+            report_path = args[1]
+        }
+        report = analyze_one(target, report)
+    }
+
+    fs.mkdir_all("testfile")
+    fs.write_text(report_path, report)
+    out.println("")
+    out.println("WROTE", report_path)
+    return 0
+}

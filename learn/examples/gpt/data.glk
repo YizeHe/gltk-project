@@ -1,0 +1,130 @@
+import tensor
+// Shakespeare character-level data loader
+// Vocab size: 64 characters (printable ASCII subset)
+
+// ============================================================
+//  Create vocabulary from data
+// ============================================================
+
+fn build_vocab(text, vocab_size) {
+  // Find unique characters
+  char_map = {}
+  chars_arr = []
+  i = 0
+  while i < len(text) {
+    ch = text[i]
+    if !has(char_map, ch) {
+      char_map[ch] = true
+      push(chars_arr, ch)
+    }
+    i = i + 1
+  }
+
+  // Limit to vocab_size most common characters
+  // For simplicity, take first vocab_size unique chars
+  n = len(chars_arr)
+  if n > vocab_size {
+    n = vocab_size
+  }
+
+  // Build stoi (string->int) and itos (int->string) maps
+  stoi_map = {}
+  itos_map = {}
+  j = 0
+  while j < n {
+    ch = chars_arr[j]
+    stoi_map[ch] = j
+    itos_map[str(j)] = ch
+    j = j + 1
+  }
+
+  // Add an unknown token at last position
+  unk_idx = vocab_size - 1
+  stoi_map["<UNK>"] = unk_idx
+  itos_map[str(unk_idx)] = "?"
+
+  return {
+    "stoi": stoi_map,
+    "itos": itos_map,
+    "vocab_size": n + 1,
+    "unk_idx": unk_idx
+  }
+}
+
+// ============================================================
+//  Encode text to token IDs
+// ============================================================
+
+fn encode(text, stoi, unk_idx) {
+  tokens = []
+  i = 0
+  while i < len(text) {
+    ch = text[i]
+    if has(stoi, ch) {
+      push(tokens, stoi[ch])
+    } else {
+      push(tokens, unk_idx)
+    }
+    i = i + 1
+  }
+  return tokens
+}
+
+// ============================================================
+//  Decode tokens back to text
+// ============================================================
+
+fn decode(tokens, itos) {
+  result = ""
+  i = 0
+  while i < len(tokens) {
+    idx_str = str(tokens[i])
+    if has(itos, idx_str) {
+      result = result + itos[idx_str]
+    } else {
+      result = result + "?"
+    }
+    i = i + 1
+  }
+  return result
+}
+
+// ============================================================
+//  Create training batches
+//  data: array of token IDs (ints)
+//  batch_size: number of sequences per batch
+//  seq_len: length of each sequence
+//  Returns: {x: [batch_size][seq_len], y: [batch_size][seq_len]}
+//  where y[i][j] = x[i][j+1] (next token prediction)
+// ============================================================
+
+fn get_batch(data, batch_size, seq_len, step) {
+  n = len(data)
+  // Pick starting positions for each batch based on step
+  batches_x = []
+  batches_y = []
+
+  b = 0
+  while b < batch_size {
+    // Deterministic offset based on batch index and step
+    start = (step * seq_len + b * seq_len) % (n - seq_len - 1)
+    if start < 0 {
+      start = start + n - seq_len - 1
+    }
+
+    x_tokens = []
+    y_tokens = []
+    i = 0
+    while i < seq_len {
+      push(x_tokens, data[start + i])
+      push(y_tokens, data[start + i + 1])
+      i = i + 1
+    }
+
+    push(batches_x, x_tokens)
+    push(batches_y, y_tokens)
+    b = b + 1
+  }
+
+  return {"x": batches_x, "y": batches_y}
+}

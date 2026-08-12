@@ -1,0 +1,40 @@
+// ch06_02_fs_bytes_bin.glk — 字节读写 + bin 解析
+// .\gltk.exe run learn\examples\ch06_02_fs_bytes_bin.glk
+
+import out, fs, bin
+
+fn main(args) {
+  let dir = "learn/examples/_tmp_ch06"
+  let path = dir + "/mini.bin"
+  fs.mkdir_all(dir)
+
+  // from_u32le([x,y,...]) => 每元素 4 字节小端
+  // 0x00005A4D -> 4D 5A 00 00；再拼 0x12345678
+  let mz = bin.from_u32le([0x5A4D])
+  let num = bin.from_u32le([0x12345678])
+  let blob = bin.concat(mz, num)
+  out.println("blob len", bin.len(blob))
+  out.println("u8:", bin.u8(blob, 0), bin.u8(blob, 1), bin.u8(blob, 2), bin.u8(blob, 3))
+  out.println("u16le@0=", bin.u16le(blob, 0))
+  out.println("u32le@4=", bin.u32le(blob, 4))
+
+  fs.write_bytes(path, blob)
+  out.println("wrote", path, "size", fs.file_size(path))
+
+  let data = fs.read_bytes(path)
+  out.println("read len", bin.len(data))
+  out.println("u16le@0=", bin.u16le(data, 0))
+  out.println("u32le@4=", bin.u32le(data, 4))
+
+  let mid = bin.slice(data, 2, 6)
+  out.println("slice(2,6) len", bin.len(mid))
+
+  let needle = bin.slice(data, 0, 2)
+  let off = bin.find_bytes(data, needle)
+  out.println("find first 2 bytes at", off)
+
+  out.println("sum8=", bin.checksum_sum8(data))
+  out.println("crc32=", bin.crc32(data))
+
+  return 0
+}

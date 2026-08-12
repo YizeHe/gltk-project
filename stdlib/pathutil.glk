@@ -1,0 +1,147 @@
+// pathutil.glk — path string manipulation helpers (pure string ops).
+// Works cross-platform; does not require fs module for basic operations.
+//
+// import "stdlib/pathutil.glk" as pathutil
+
+import re, str
+
+// join2 joins exactly two path segments.
+// Detects separator style from the first segment.
+fn join2(a, b) {
+    if str.ends_with(a, "\\") || str.ends_with(a, "/") {
+        return a + b
+    }
+    if str.contains(a, "\\") {
+        return a + "\\" + b
+    }
+    return a + "/" + b
+}
+
+// join3 joins exactly three path segments.
+fn join3(a, b, c) {
+    return join2(join2(a, b), c)
+}
+
+// basename returns the last component of a path.
+// basename("/a/b/c.txt") => "c.txt"
+// basename("C:\\dir\\file") => "file"
+fn basename(path) {
+    // normalize to backslash, split, take last
+    let s = str.replace(path, "/", "\\")
+    let parts = re.split("\\\\", s)
+    if len(parts) == 0 {
+        return path
+    }
+    return parts[len(parts) - 1]
+}
+
+// dirname returns everything before the last separator.
+// dirname("/a/b/c.txt") => "/a/b"
+// dirname("file.txt") => "."
+fn dirname(path) {
+    let s = str.replace(path, "/", "\\")
+    let parts = re.split("\\\\", s)
+    if len(parts) <= 1 {
+        return "."
+    }
+    // detect separator style from original path
+    let use_fwd = str.starts_with(path, "/")
+    let sep = "\\"
+    if use_fwd {
+        sep = "/"
+    }
+    // rejoin all but last, skipping empty parts
+    let result = ""
+    let i = 0
+    let last = len(parts) - 1
+    while i < last {
+        if str.len(parts[i]) > 0 {
+            if str.len(result) > 0 {
+                result = result + sep + parts[i]
+            } else {
+                result = parts[i]
+            }
+        }
+        i = i + 1
+    }
+    // preserve leading separator for absolute paths
+    if use_fwd {
+        result = "/" + result
+    }
+    if str.len(result) == 0 {
+        return "."
+    }
+    return result
+}
+
+// ext returns the file extension including the dot.
+// ext("file.txt") => ".txt"
+// ext("noext") => ""
+fn ext(path) {
+    let b = basename(path)
+    let parts = re.split("\\.", b)
+    if len(parts) < 2 {
+        return ""
+    }
+    return "." + parts[len(parts) - 1]
+}
+
+// stem returns the filename without extension.
+// stem("file.tar.gz") => "file.tar"
+fn stem(path) {
+    let b = basename(path)
+    let dot_idx = str.index_of(b, ".")
+    if dot_idx < 0 {
+        return b
+    }
+    // find last dot — split and rejoin all but last
+    let parts = re.split("\\.", b)
+    if len(parts) < 2 {
+        return b
+    }
+    let result = parts[0]
+    let i = 1
+    while i < len(parts) - 1 {
+        result = result + "." + parts[i]
+        i = i + 1
+    }
+    return result
+}
+
+// is_absolute returns true if path starts with / or X:\
+fn is_absolute(path) {
+    if str.len(path) == 0 {
+        return false
+    }
+    if str.starts_with(path, "/") {
+        return true
+    }
+    if str.len(path) >= 3 {
+        let letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        let c = _char_at(path, 0)
+        if str.contains(letters, c) && _char_at(path, 1) == ":" {
+            let s = _char_at(path, 2)
+            if s == "\\" || s == "/" {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+// normalize replaces all forward slashes with backslash (Windows) or vice versa.
+fn normalize(path, use_backslash) {
+    if use_backslash {
+        return str.replace(path, "/", "\\")
+    }
+    return str.replace(path, "\\", "/")
+}
+
+// _char_at extracts a single character at position using re.
+fn _char_at(s, pos) {
+    let all = re.find_all(".", s)
+    if pos >= 0 && pos < len(all) {
+        return all[pos]
+    }
+    return ""
+}

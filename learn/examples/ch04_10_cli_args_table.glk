@@ -1,0 +1,77 @@
+// ch04_10_cli_args_table.glk — 综合：解析命令行 flags 到 map
+// .\gltk.exe run learn\examples\ch04_10_cli_args_table.glk -- --in a.exe --out out/ --verbose
+// .\gltk.exe run learn\examples\ch04_10_cli_args_table.glk -- -h
+
+import out, str
+
+fn parse_args(args) {
+  let opt = {}
+  opt.verbose = false
+  opt.help = false
+  opt.in_path = ""
+  opt.out_dir = ""
+
+  let i = 0
+  while i < len(args) {
+    let a = args[i]
+    if a == "-h" || a == "--help" {
+      opt.help = true
+    } else if a == "--verbose" || a == "-v" {
+      opt.verbose = true
+    } else if a == "--in" {
+      i = i + 1
+      if i < len(args) {
+        opt.in_path = args[i]
+      }
+    } else if a == "--out" {
+      i = i + 1
+      if i < len(args) {
+        opt.out_dir = args[i]
+      }
+    } else if str.starts_with(a, "--") {
+      out.println("unknown flag:", a)
+    } else {
+      // 位置参数：若尚未有 in，当作输入
+      if opt.in_path == "" {
+        opt.in_path = a
+      }
+    }
+    i = i + 1
+  }
+  return opt
+}
+
+fn main(args) {
+  let opt = parse_args(args)
+
+  if opt.help || len(args) == 0 {
+    out.println("usage: gltk run ch04_10_cli_args_table.glk -- [--in file] [--out dir] [--verbose]")
+    if opt.help {
+      return 0
+    }
+  }
+
+  out.println("parsed options:")
+  out.println("  in     =", opt.in_path)
+  out.println("  out    =", opt.out_dir)
+  out.println("  verbose=", opt.verbose)
+
+  if opt.verbose {
+    out.println("args raw:")
+    for i in range(0, len(args)) {
+      out.println(" ", i, args[i])
+    }
+  }
+
+  // 简单校验
+  if opt.in_path == "" {
+    out.println("error: missing --in")
+    return 2
+  }
+  if !str.contains(opt.in_path, ".") {
+    out.println("warn: input has no '.' extension")
+  }
+
+  out.println("OK — would process", opt.in_path, "->", opt.out_dir)
+  return 0
+}

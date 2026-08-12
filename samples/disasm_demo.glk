@@ -1,0 +1,50 @@
+// disasm_demo.glk - disassemble a binary or a hard-coded x64 snippet
+// usage:
+//   gltk run samples/disasm_demo.glk
+//   gltk run samples/disasm_demo.glk -- <path> [arch] [count]
+import disasm, fs, out, crypto
+
+fn main(args) {
+  let data = null
+  let arch = "x64"
+  let base = 0
+  let count = 20
+
+  if len(args) >= 1 {
+    let path = args[0]
+    if !fs.exists(path) {
+      out.println("file not found: " + path)
+      return 1
+    }
+    data = fs.read_bytes(path)
+    if len(args) >= 2 {
+      arch = args[1]
+    }
+    if len(args) >= 3 {
+      count = int(args[2])
+    }
+  } else {
+    // default demo: nop; ret; mov rax, rax  (use hex_decode - string \x is unicode not raw bytes)
+    data = crypto.hex_decode("90c34889c0")
+    base = 0x1000
+    out.println("no input file - using sample x64 bytes (nop/ret/mov)")
+  }
+
+  out.println("arch=" + arch + " size=" + ("" + len(data)) + " count=" + ("" + count))
+  let insns = disasm.disasm(data, arch, base, count)
+  out.println("decoded=" + ("" + len(insns)))
+  for i in range(0, len(insns)) {
+    let insn = insns[i]
+    let line = ("" + insn.addr) + ": " + insn.bytes + "  " + insn.mnemonic
+    if insn.op_str != "" {
+      line = line + " " + insn.op_str
+    }
+    out.println(line)
+  }
+
+  let one = disasm.disasm_one(data, arch, base)
+  if one != null {
+    out.println("first: " + one.mnemonic + " bytes=" + one.bytes)
+  }
+  return 0
+}

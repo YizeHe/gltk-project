@@ -1,0 +1,22 @@
+import asar, out
+fn main(args) {
+  let p = "..\\extract\\installer\\resources\\app.asar"
+  let info = asar.info(p)
+  out.println("files=", info.file_count)
+  let lst = asar.list(p)
+  out.println("list_len=", len(lst))
+  out.println("0=", lst[0])
+  let i = 0
+  while i < len(lst) {
+    if lst[i] == "package.json" {
+      out.println("found package.json")
+    }
+    if lst[i] == "dist/electron/main.js" {
+      out.println("found main.js")
+    }
+    i = i + 1
+  }
+  let b = asar.read(p, "package.json")
+  out.println("type", typeof(b), "len", len(b))
+  return 0
+}

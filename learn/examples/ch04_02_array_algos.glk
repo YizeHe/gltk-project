@@ -1,0 +1,110 @@
+// ch04_02_array_algos.glk — 数组算法：查找、过滤打印、反转、最值
+// .\gltk.exe run learn\examples\ch04_02_array_algos.glk
+
+import out
+
+fn index_of(arr, target) {
+  let i = 0
+  while i < len(arr) {
+    if arr[i] == target {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+fn count_gt(arr, thr) {
+  let c = 0
+  for v in arr {
+    if v > thr {
+      c = c + 1
+    }
+  }
+  return c
+}
+
+fn reverse_inplace(arr) {
+  let i = 0
+  let j = len(arr) - 1
+  while i < j {
+    let t = arr[i]
+    arr[i] = arr[j]
+    arr[j] = t
+    i = i + 1
+    j = j - 1
+  }
+}
+
+fn min_max(arr) {
+  if len(arr) == 0 {
+    return {ok: false}
+  }
+  let lo = arr[0]
+  let hi = arr[0]
+  for v in arr {
+    if v < lo { lo = v }
+    if v > hi { hi = v }
+  }
+  return {ok: true, min: lo, max: hi}
+}
+
+// 选择排序（教学用，小数组）
+fn sort_asc(arr) {
+  let n = len(arr)
+  let i = 0
+  while i < n {
+    let best = i
+    let j = i + 1
+    while j < n {
+      if arr[j] < arr[best] {
+        best = j
+      }
+      j = j + 1
+    }
+    let t = arr[i]
+    arr[i] = arr[best]
+    arr[best] = t
+    i = i + 1
+  }
+}
+
+fn print_arr(label, arr) {
+  out.print(label + ": [")
+  let i = 0
+  while i < len(arr) {
+    if i > 0 { out.print(", ") }
+    out.print("" + arr[i])
+    i = i + 1
+  }
+  out.println("]")
+}
+
+fn main(args) {
+  let data = [5, 1, 4, 1, 9, 2, 6]
+  print_arr("data", data)
+  out.println("index_of 9 =", index_of(data, 9))
+  out.println("count > 4 =", count_gt(data, 4))
+
+  let mm = min_max(data)
+  if mm.ok {
+    out.println("min=", mm.min, " max=", mm.max)
+  }
+
+  reverse_inplace(data)
+  print_arr("reversed", data)
+
+  sort_asc(data)
+  print_arr("sorted", data)
+
+  // 过滤打印：偶数
+  out.print("evens: ")
+  for v in data {
+    if v % 2 == 0 {
+      out.print(("" + v) + " ")
+    }
+  }
+  out.println("")
+
+  return 0
+}

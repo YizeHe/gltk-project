@@ -1,0 +1,4 @@
+contact alice@test.com or bob@ssgreen.org
+C2: http://malicious.example/gate
+ip=203.0.113.9
+uuid=5f5749e77a9b4c2a

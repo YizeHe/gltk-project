@@ -1,0 +1,62 @@
+// learn/examples/ch02_04_types_truth.glk
+// 第 2 章：typeof、真值、转换
+// 运行: .\gltk.exe run learn\examples\ch02_04_types_truth.glk
+
+import out
+
+fn show(label, v) {
+  out.println(label, " typeof=", typeof(v), " value=", v)
+}
+
+fn main(args) {
+  // ---- typeof 结果（字符串）----
+  show("null", null)
+  show("true", true)
+  show("false", false)
+  show("int", 1)
+  show("float", 1.5)
+  show("str", "hi")
+  show("array", [1, 2])
+  show("map", {a: 1})
+
+  // ---- 真值（if / && / || / ? : 都用同一套）----
+  // 假值：null, false, 0, 0.0, "", 空数组, 空 map
+  // 其余为真
+  out.println("---- truth ----")
+  out.println("null ?", null ? "T" : "F")
+  out.println("false ?", false ? "T" : "F")
+  out.println("0 ?", 0 ? "T" : "F")
+  out.println("empty str ?", "" ? "T" : "F")
+  out.println("empty arr ?", [] ? "T" : "F")
+  out.println("empty map ?", {} ? "T" : "F")
+  out.println("1 ?", 1 ? "T" : "F")
+  out.println("hi ?", "hi" ? "T" : "F")
+  out.println("[0] ?", [0] ? "T" : "F")
+
+  // ---- 逻辑短路 ----
+  out.println("true || boom", true || false)
+  out.println("false && boom", false && true)
+  out.println("!0", !0)
+  out.println("!1", !1)
+
+  // ---- 比较 ----
+  out.println("1 == 1", 1 == 1)
+  out.println("1 != 2", 1 != 2)
+  out.println("2 > 1", 2 > 1)
+  out.println("2 >= 2", 2 >= 2)
+  out.println("1 < 2", 1 < 2)
+  out.println("\"a\" == \"a\"", "a" == "a")
+
+  // ---- 转换 ----
+  // int("42") 可用；str(x) 可能被 native 模块名 str 覆盖，推荐 ""+x 或 to_str
+  out.println("int(\"42\") =", int("42"))
+  out.println("to_str(42) =", to_str(42))
+  out.println("\"\"+42 =", "" + 42)
+
+  // ---- 三元 ----
+  let score = 75
+  let grade = score >= 60 ? "pass" : "fail"
+  out.println("grade =", grade)
+
+  return 0
+}

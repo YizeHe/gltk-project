@@ -1,0 +1,27 @@
+// ch03_lib_math.glk — 用户库示例（无 main）
+// 被 ch03_08_import.glk 导入
+
+fn clamp(x, lo, hi) {
+  if x < lo {
+    return lo
+  }
+  if x > hi {
+    return hi
+  }
+  return x
+}
+
+fn abs(x) {
+  if x < 0 {
+    return -x
+  }
+  return x
+}
+
+fn sum_arr(arr) {
+  let s = 0
+  for v in arr {
+    s = s + v
+  }
+  return s
+}

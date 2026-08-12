@@ -1,0 +1,8 @@
+// Example user library — no main required; all top-level fn are exported.
+fn double(x) {
+  return x * 2
+}
+
+fn add(a, b) {
+  return a + b
+}

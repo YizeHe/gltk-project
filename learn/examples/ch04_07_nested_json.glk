@@ -1,0 +1,51 @@
+// ch04_07_nested_json.glk — 嵌套结构 + JSON 报告
+// .\gltk.exe run learn\examples\ch04_07_nested_json.glk
+
+import out, json, str
+
+fn main(args) {
+  // 构造「分析结果」对象
+  let result = {}
+  result.ok = true
+  result.file = "demo.exe"
+  result.size = 4096
+  result.tags = ["pe", "x64"]
+  result.sections = [
+    {name: ".text", vsize: 0x1000},
+    {name: ".rdata", vsize: 0x800}
+  ]
+  result.meta = {}
+  result.meta.tool = "gltk"
+  result.meta.note = "chapter 4 demo"
+
+  // 读取嵌套
+  out.println("file=", result.file)
+  out.println("first tag=", result.tags[0])
+  out.println("section0=", result.sections[0].name, result.sections[0].vsize)
+
+  // 修改嵌套
+  result.sections[1].vsize = 0x900
+  result.tags[1] = "amd64"
+
+  // 遍历 sections
+  for i in range(0, len(result.sections)) {
+    let sec = result.sections[i]
+    out.println("sec", i, sec.name, "vsize=", sec.vsize)
+  }
+
+  // 序列化
+  let text = json.stringify(result)
+  out.println("JSON:")
+  out.println(text)
+
+  // 反序列化再取字段
+  let back = json.parse(text)
+  out.println("roundtrip note=", back.meta.note)
+
+  // 字符串里找标签
+  if str.contains(text, ".text") {
+    out.println("json text contains .text")
+  }
+
+  return 0
+}

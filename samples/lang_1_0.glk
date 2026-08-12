@@ -1,0 +1,44 @@
+// GrokLang 1.0 language features demo:
+// - top-level let as true globals
+// - free natives: push / pop / keys / has / delete / clone
+// - array + array concat
+// - try/catch covers runtime OOB
+
+import out
+
+let host = "localhost"
+let cfg = {server: host, port: 8080}
+
+fn describe() {
+  return cfg["server"] + ":" + to_str(cfg["port"])
+}
+
+fn main(args) {
+  out.println("cfg =", describe())
+
+  let a = [1, 2]
+  push(a, 3)
+  out.println("after push:", a)
+  let last = pop(a)
+  out.println("popped:", last, "arr:", a)
+
+  let b = a + [9, 10]
+  out.println("concat:", b)
+
+  let m = clone(cfg)
+  m["extra"] = true
+  out.println("keys(cfg):", keys(cfg))
+  out.println("has(m, extra):", has(m, "extra"))
+  delete(m, "extra")
+  out.println("after delete has extra:", has(m, "extra"))
+
+  let caught = ""
+  try {
+    let x = a[99]
+    caught = "no"
+  } catch e {
+    caught = e
+  }
+  out.println("oob catch:", caught)
+  return 0
+}

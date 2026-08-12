@@ -1,0 +1,63 @@
+// ch07_08_xor_crypto.glk — XOR 解密 + 哈希
+// .\gltk.exe run learn\examples\ch07_08_xor_crypto.glk
+
+import out, fs, bin, crypto, str
+
+fn xor_bytes(data, key) {
+  // data: bytes; 返回新 bytes（用 write 逐字节——bin 无逐字节 API 时用 from_u32le 拼）
+  // 简化：转成可处理方式——读 u8 循环拼 from_u32le 不优雅
+  // 使用字符串路径：若 data 是 payload 文件
+  let L = bin.len(data)
+  // 构造结果：从全 0 缓冲 write_at 每个字节——fill 单字节循环
+  let outb = bin.fill(bin.from_u32le([0]), 0, L, 0)
+  // 上面 from_u32le 至少 4 字节；用 fill 扩
+  outb = bin.fill(outb, 0, L, 0)
+  let i = 0
+  while i < L {
+    let b = bin.u8(data, i) ^ key
+    // write single byte: from_u32le then slice
+    let one = bin.slice(bin.from_u32le([b]), 0, 1)
+    outb = bin.write_at(outb, i, one)
+    i = i + 1
+  }
+  return bin.slice(outb, 0, L)
+}
+
+fn bytes_to_ascii(data) {
+  // 仅当可打印
+  let s = ""
+  let i = 0
+  let L = bin.len(data)
+  while i < L {
+    let c = bin.u8(data, i)
+    if c >= 32 && c < 127 {
+      // 无法 chr：用已知表有限支持；这里输出 hex 更稳
+      s = s + "."
+    } else {
+      s = s + "."
+    }
+    i = i + 1
+  }
+  // 更好：用 crypto/hex 若有 encode
+  return crypto.hex_encode(data)
+}
+
+fn main(args) {
+  let path = "learn/testdata/re/09_xor55_payload.bin"
+  let data = fs.read_bytes(path)
+  out.println("cipher len=", bin.len(data), " md5=", crypto.md5_hex(data))
+
+  let plain = xor_bytes(data, 0x55)
+  out.println("plain hex=", crypto.hex_encode(plain))
+  out.println("plain md5=", crypto.md5_hex(plain))
+
+  // 已知明文 HiddenPayloadXOR
+  let expect = "HiddenPayloadXOR"
+  // 比较 hex
+  let exp_hex = crypto.hex_encode(expect)
+  out.println("expect hex=", exp_hex)
+  out.println("match?", crypto.hex_encode(plain) == exp_hex)
+
+  out.println("sha256 plain=", crypto.sha256_hex(plain))
+  return 0
+}

@@ -1,0 +1,63 @@
+// ch04_08_table.glk — 用「数组 of map」做表，过滤/投影
+// .\gltk.exe run learn\examples\ch04_08_table.glk
+
+import out, str
+
+fn print_row(r) {
+  out.println(r.name, " | arch=", r.arch, " | size=", r.size, " | packed=", r.packed)
+}
+
+fn main(args) {
+  // 表：每行一个 map
+  let rows = [
+    {name: "a.exe", arch: "x64", size: 12000, packed: false},
+    {name: "b.exe", arch: "x86", size: 8000, packed: true},
+    {name: "c.dll", arch: "x64", size: 22000, packed: true},
+    {name: "d.exe", arch: "x64", size: 5000, packed: false}
+  ]
+
+  out.println("== all ==")
+  for r in rows {
+    print_row(r)
+  }
+
+  out.println("== x64 only ==")
+  for r in rows {
+    if r.arch == "x64" {
+      print_row(r)
+    }
+  }
+
+  out.println("== packed ==")
+  for r in rows {
+    if r.packed {
+      print_row(r)
+    }
+  }
+
+  // 聚合：x64 总大小
+  let total = 0
+  for r in rows {
+    if r.arch == "x64" {
+      total = total + r.size
+    }
+  }
+  out.println("x64 total size=", total)
+
+  // 投影：只收集名字（打印）
+  out.print("names: ")
+  for r in rows {
+    out.print(r.name + " ")
+  }
+  out.println("")
+
+  // 后缀过滤
+  out.println("== *.exe ==")
+  for r in rows {
+    if str.ends_with(str.lower(r.name), ".exe") {
+      print_row(r)
+    }
+  }
+
+  return 0
+}

@@ -1,0 +1,28 @@
+// ch07_13_workflow_checklist.glk — 打印标准 RE 工作流检查单（教学）
+// .\gltk.exe run learn\examples\ch07_13_workflow_checklist.glk
+
+import out
+
+fn main(args) {
+  let steps = [
+    "1. 采集：复制样本、记录来源与哈希（md5/sha256）",
+    "2. Triage：size、MZ/PE、熵、是否加壳/安装包",
+    "3. 静态：pe.parse sections/imports/exports/resources/overlay",
+    "4. 字符串：str.scan / strings_re + 关键字表 + IOC regex",
+    "5. 定位：高熵区、RCDATA、overlay、可疑 section",
+    "6. 解密：ScriptGuard/AHPK2/AES/XOR 等对症下药",
+    "7. 验证：解密后是否为 AHK/脚本/配置/PE",
+    "8. 报告：JSON/Markdown，含命令可复现",
+    "9. 交付：gltk pack 混淆打包分析器（可选）",
+    "10. 回归：同一 gltk 版本 + 同一脚本 = 同一结果"
+  ]
+  out.println("=== GrokLang RE Workflow Checklist ===")
+  for s in steps {
+    out.println(s)
+  }
+  out.println("")
+  out.println("Fixtures: learn/testdata/re/")
+  out.println("Samples:  samples/*_unpack.glk, samples/pe_info.glk, ...")
+  out.println("Never execute malware; parse bytes only.")
+  return 0
+}

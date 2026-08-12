@@ -1,0 +1,46 @@
+// ch05_05_pipeline.glk — 假想逆向流水线：发现 -> 分析 -> 汇总
+// .\gltk.exe run learn\examples\ch05_05_pipeline.glk
+
+import out, async
+
+fn discover(root_id) {
+  async.sleep(10)
+  // 假装列出 4 个样本 id
+  return [root_id * 10 + 1, root_id * 10 + 2, root_id * 10 + 3, root_id * 10 + 4]
+}
+
+fn analyze(sample_id) {
+  async.sleep(25)
+  let score = (sample_id % 7) + 1
+  return {
+    id: sample_id,
+    score: score,
+    flagged: score >= 5
+  }
+}
+
+fn main(args) {
+  out.println("1) discover")
+  let ids = discover(3)
+  out.println("   found", len(ids), "samples")
+
+  out.println("2) analyze in parallel")
+  let reports = async.parallel(analyze, ids)
+
+  out.println("3) summarize")
+  let flagged = 0
+  let best = null
+  for r in reports {
+    out.println("  id=", r.id, " score=", r.score, " flagged=", r.flagged)
+    if r.flagged {
+      flagged = flagged + 1
+    }
+    if best == null {
+      best = r
+    } else if r.score > best.score {
+      best = r
+    }
+  }
+  out.println("flagged=", flagged, " best_id=", best.id, " best_score=", best.score)
+  return 0
+}

@@ -1,0 +1,37 @@
+// ch08_01_http_get.glk — HTTP GET / 状态码 / JSON
+// .\gltk.exe run learn\examples\ch08_01_http_get.glk
+
+import out, http, json
+
+fn main(args) {
+  let url = "https://httpbin.org/get"
+  if len(args) > 0 { url = args[0] }
+
+  out.println("GET", url)
+  let r = http.get(url, {
+    timeout: 25,
+    user_agent: "gltk-learn-ch08/1.0",
+    headers: {"Accept": "application/json", "X-Tutorial": "ch08"}
+  })
+
+  out.println("ok=", r.ok, " status=", r.status)
+  out.println("error=", r.error)
+  out.println("final url=", r.url)
+  out.println("body_len=", len(r.body))
+
+  if r.ok && r.status >= 200 && r.status < 300 {
+    let j = json.parse(r.body)
+    if typeof(j) == "map" {
+      out.println("json map parsed, typeof ok")
+      // httpbin returns headers/url fields
+      if j.url {
+        out.println("json.url=", j.url)
+      }
+    } else {
+      out.println("body head:", r.body)
+    }
+  } else {
+    out.println("request failed or non-2xx — check network")
+  }
+  return r.ok ? 0 : 1
+}

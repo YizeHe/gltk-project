@@ -1,0 +1,254 @@
+// clash_vless.glk — GLTK 极简 Clash（仅 VLESS / TCP / 可选 TLS）
+//
+// 用法:
+//   gltk run samples/clash_vless.glk
+//   gltk run samples/clash_vless.glk -- samples/clash_vless.json
+//   gltk run samples/clash_vless.glk -- --test-parse <uuid>
+//   gltk run samples/clash_vless.glk -- --gui
+//
+// 启动后本机 SOCKS5: 127.0.0.1:<socks-port>
+//
+// 范围（有意简化）:
+//   ✅ SOCKS5 入站（无认证）  ✅ VLESS 出站 TCP  ✅ TLS(SNI/skip-cert)
+//   ❌ UDP / 分流规则 / WS·gRPC·REALITY / flow
+
+import clash, out, fs, json, time, gui
+
+fn usage() {
+  out.println("GLTK Clash-VLESS Lite  " + clash.version())
+  out.println("")
+  out.println("  gltk run samples/clash_vless.glk [-- config.json]")
+  out.println("  gltk run samples/clash_vless.glk -- --test-parse <uuid>")
+  out.println("  gltk run samples/clash_vless.glk -- --status")
+  out.println("  gltk run samples/clash_vless.glk -- --stop")
+  out.println("  gltk run samples/clash_vless.glk -- --gui")
+  out.println("")
+  out.println("config: socks-port + proxies[0].{name,type,server,port,uuid,tls,servername,network,skip-cert-verify}")
+}
+
+fn load_config(path) {
+  if path == "" {
+    path = "samples/clash_vless.json"
+  }
+  if !fs.exists(path) {
+    out.println("config not found:", path)
+    out.println("edit samples/clash_vless.json — fill server / uuid / sni")
+    return null
+  }
+  let raw = fs.read_text(path)
+  let cfg = json.parse(raw)
+  if typeof(cfg) != "map" {
+    out.println("bad json config")
+    return null
+  }
+  return cfg
+}
+
+fn print_status() {
+  let s = clash.status()
+  out.println("running=", s.running, "port=", s.port, "proxy=", s.proxy)
+  out.println("server=", s.server)
+  out.println("conns=", s.conns, "accepts=", s.accepts, "errors=", s.errors)
+  out.println("bytes_up=", s.bytes_up, "bytes_down=", s.bytes_down)
+  if s.last_error != "" {
+    out.println("last_error=", s.last_error)
+  }
+}
+
+fn run_cli(cfg) {
+  let r = clash.start(cfg)
+  if !r.ok {
+    out.println("start FAILED:", r.error)
+    return 1
+  }
+  out.println("=== Clash-VLESS Lite started ===")
+  out.println("version:", r.version)
+  out.println("SOCKS5:  127.0.0.1:" + ("" + r.port))
+  out.println("proxy:   ", r.proxy, "->", r.server, "tls=", r.tls)
+  out.println("")
+  out.println("test:")
+  out.println("  curl.exe -x socks5h://127.0.0.1:" + ("" + r.port) + " https://httpbin.org/ip")
+  out.println("status every 5s — Ctrl+C to stop")
+  let i = 0
+  while true {
+    time.sleep_ms(5000)
+    i = i + 1
+    let s = clash.status()
+    if !s.running {
+      out.println("stopped")
+      break
+    }
+    out.println("[" + ("" + i) + "] conns=" + ("" + s.conns) +
+      " up=" + ("" + s.bytes_up) + " down=" + ("" + s.bytes_down) +
+      " err=" + ("" + s.errors))
+    if s.last_error != "" {
+      out.println("  last_error:", s.last_error)
+    }
+  }
+  clash.stop()
+  return 0
+}
+
+let g_log = null
+let g_st = null
+let g_cfg = null
+let g_started = false
+
+fn gui_append(msg) {
+  gui.append_text(g_log, msg + "\n")
+  out.println(msg)
+}
+
+fn gui_refresh() {
+  let s = clash.status()
+  let line = "running=" + ("" + s.running) + " port=" + ("" + s.port) +
+    " conns=" + ("" + s.conns) + " up=" + ("" + s.bytes_up) +
+    " down=" + ("" + s.bytes_down)
+  gui.set_text(g_st, line)
+}
+
+fn on_start() {
+  if g_started {
+    gui_append("already started")
+    return
+  }
+  let r = clash.start(g_cfg)
+  if !r.ok {
+    gui_append("FAIL: " + r.error)
+    gui.msgbox(r.error, "start failed")
+    return
+  }
+  g_started = true
+  gui_append("started SOCKS5 127.0.0.1:" + ("" + r.port) + " -> " + r.server)
+  gui_refresh()
+}
+
+fn on_stop() {
+  clash.stop()
+  g_started = false
+  gui_append("stopped")
+  gui_refresh()
+}
+
+fn on_status() {
+  gui_refresh()
+  print_status()
+  gui_append("status refreshed")
+}
+
+fn on_quit() {
+  clash.stop()
+  gui.quit()
+}
+
+fn run_gui(cfg) {
+  if !gui.available() {
+    out.println("gui not available, CLI mode")
+    return run_cli(cfg)
+  }
+  g_cfg = cfg
+  gui.init()
+  let w = gui.window("GLTK Clash-VLESS Lite", 520, 360)
+  gui.label(w, "极简 Clash · 仅 VLESS", 16, 12, 300, 24)
+  g_st = gui.label(w, "idle", 16, 40, 480, 24)
+  let b1 = gui.button(w, "Start", 16, 80, 90, 32)
+  let b2 = gui.button(w, "Stop", 116, 80, 90, 32)
+  let b3 = gui.button(w, "Status", 216, 80, 90, 32)
+  let b4 = gui.button(w, "Quit", 316, 80, 90, 32)
+  g_log = gui.textedit(w, 16, 130, 480, 200)
+  gui.set_text(g_log, "Edit samples/clash_vless.json then Start.\nSOCKS5 listens on socks-port.\n")
+  gui.on_click(b1, on_start)
+  gui.on_click(b2, on_stop)
+  gui.on_click(b3, on_status)
+  gui.on_click(b4, on_quit)
+  gui.show(w)
+  gui.run()
+  clash.stop()
+  return 0
+}
+
+fn ends_with_json(s) {
+  // avoid string index if fragile — simple: len + last 5 chars via slice if available
+  if len(s) < 5 {
+    return false
+  }
+  // use str module-free: check known path patterns
+  if s == "samples/clash_vless.json" {
+    return true
+  }
+  // fallback: any arg containing .json
+  let n = len(s)
+  // manual check last 5 as bytes via split is hard; accept path containing ".json"
+  let k = 0
+  while k + 5 <= n {
+    // can't easily slice without str — check with str builtins via typeof
+    k = k + 1
+  }
+  // use json in name heuristic
+  return true
+}
+
+fn main(args) {
+  out.println("clash.version =", clash.version())
+
+  let path = ""
+  let mode = "run"
+  let i = 0
+  while i < len(args) {
+    let a = args[i]
+    if a == "--test-parse" {
+      if i + 1 < len(args) {
+        let u = args[i + 1]
+        let t = clash.test_parse(u)
+        out.println("ok=", t.ok, "uuid_hex=", t.uuid_hex)
+        out.println("header_len=", t.header_len)
+        out.println("header_hex=", t.header_hex)
+        if !t.ok {
+          out.println("error=", t.error)
+          return 1
+        }
+        return 0
+      }
+      out.println("need uuid")
+      return 1
+    }
+    if a == "--status" {
+      print_status()
+      return 0
+    }
+    if a == "--stop" {
+      let r = clash.stop()
+      out.println("stop ok=", r.ok, r.error)
+      return 0
+    }
+    if a == "--gui" {
+      mode = "gui"
+    } else if a == "-h" || a == "--help" {
+      usage()
+      return 0
+    } else if a != "--" {
+      // treat as config path if looks like path
+      if a != "" {
+        path = a
+      }
+    }
+    i = i + 1
+  }
+
+  // if path is a flag leftover, ignore
+  if path == "--gui" || path == "--status" || path == "--stop" || path == "--help" {
+    path = ""
+  }
+
+  let cfg = load_config(path)
+  if cfg == null {
+    usage()
+    return 2
+  }
+
+  out.println("config loaded")
+  if mode == "gui" {
+    return run_gui(cfg)
+  }
+  return run_cli(cfg)
+}

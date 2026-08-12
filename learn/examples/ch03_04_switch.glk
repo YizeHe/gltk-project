@@ -1,0 +1,56 @@
+// ch03_04_switch.glk — switch / case / default
+// .\gltk.exe run learn\examples\ch03_04_switch.glk
+
+import out
+
+fn describe_code(code) {
+  // 多值 case，无 fall-through
+  switch code {
+    case 200:
+      return "OK"
+    case 301, 302:
+      return "Redirect"
+    case 400, 401, 403, 404:
+      return "Client Error"
+    case 500, 502, 503:
+      return "Server Error"
+    default:
+      return "Other"
+  }
+}
+
+fn main(args) {
+  let x = 2
+  switch x {
+    case 1:
+      out.println("one")
+    case 2, 3:
+      out.println("two-or-three")
+    default:
+      out.println("default")
+  }
+
+  // 字符串 switch
+  let op = "+"
+  switch op {
+    case "+":
+      out.println("add")
+    case "-":
+      out.println("sub")
+    case "*", "/":
+      out.println("mul-or-div")
+    default:
+      out.println("unknown op")
+  }
+
+  out.println("200 ->", describe_code(200))
+  out.println("302 ->", describe_code(302))
+  out.println("404 ->", describe_code(404))
+  out.println("503 ->", describe_code(503))
+  out.println("418 ->", describe_code(418))
+
+  // 注意：case 匹配用 ==，不会贯穿到下一 case
+  // 需要多值时写：case a, b, c:
+
+  return 0
+}

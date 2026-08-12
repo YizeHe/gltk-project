@@ -1,0 +1,35 @@
+// string_scan.glk — scan a binary for AutoHotkey / ScriptGuard markers
+import fs, out, str
+
+fn main(args) {
+  let path = ""
+  if len(args) >= 1 {
+    path = args[0]
+  } else {
+    // default: look for nearby extract if present
+    path = "../GTAOL/extract/resources/RCDATA_1_1033.bin"
+  }
+  if !fs.exists(path) {
+    out.println("skip: file not found: " + path)
+    out.println("usage: gltk run string_scan.glk -- <binary>")
+    return 0
+  }
+  let data = fs.read_bytes(path)
+  out.println("scanning " + path + " size=" + ("" + len(data)))
+  let hits = str.scan(data, 6)
+  let markers = ["AutoHotkey", "ScriptGuard", "Ahk2Exe", "#NoEnv", "SendInput", "FileInstall"]
+  let found = 0
+  for i in range(0, len(hits)) {
+    let h = hits[i]
+    let t = h.text
+    let low = str.lower(t)
+    for j in range(0, len(markers)) {
+      if str.contains(low, str.lower(markers[j])) {
+        out.println("[" + h.enc + " @" + ("" + h.off) + "] " + markers[j] + " :: " + t)
+        found = found + 1
+      }
+    }
+  }
+  out.println("marker hits=" + ("" + found) + " total strings=" + ("" + len(hits)))
+  return 0
+}

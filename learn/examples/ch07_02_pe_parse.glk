@@ -1,0 +1,78 @@
+// ch07_02_pe_parse.glk — pe.parse / summary / imports / overlay
+// .\gltk.exe run learn\examples\ch07_02_pe_parse.glk -- gltk.exe
+
+import out, fs, pe
+
+fn main(args) {
+  let path = "gltk.exe"
+  if len(args) > 0 { path = args[0] }
+  if !fs.exists(path) {
+    out.println("missing", path)
+    return 1
+  }
+
+  // 轻量摘要（路径 API，适合大文件）
+  out.println("=== pe.summary ===")
+  let sum = pe.summary(path)
+  // 字段因实现可能不同，打印 ok/size 等
+  out.println("summary typeof=", typeof(sum))
+  if sum.ok == false {
+    out.println("summary error=", sum.error)
+  } else {
+    out.println("path=", sum.path)
+    out.println("size=", sum.size)
+  }
+
+  out.println("=== pe.imports (may be heavy) ===")
+  try {
+    let imps = pe.imports(path)
+    out.println("imports typeof=", typeof(imps), " len=", len(imps))
+    let n = len(imps)
+    if n > 12 { n = 12 }
+    let i = 0
+    while i < n {
+      out.println(" ", imps[i])
+      i = i + 1
+    }
+  } catch e {
+    out.println("imports skip:", e)
+  }
+
+  out.println("=== pe.overlay ===")
+  try {
+    let ov = pe.overlay(path)
+    out.println("overlay=", ov)
+  } catch e {
+    out.println("overlay skip:", e)
+  }
+
+  // 完整 parse（大文件慎用；gltk.exe ~12MB 可）
+  out.println("=== pe.parse light ===")
+  let data = fs.read_bytes(path)
+  let info = pe.parse(data, true)
+  out.println("machine=", info.machine, " entry=", info.entry)
+  let secs = info.sections
+  out.println("sections=", len(secs))
+  let j = 0
+  let m = len(secs)
+  if m > 16 { m = 16 }
+  while j < m {
+    let s = secs[j]
+    out.println(" ", s.name, " vsize=", s.vsize, " rawsize=", s.rawsize, " rawptr=", s.rawptr)
+    j = j + 1
+  }
+  let res = info.resources
+  out.println("resources=", len(res))
+  let k = 0
+  let rk = 0
+  while k < len(res) && rk < 8 {
+    let r = res[k]
+    if r.type == "RCDATA" || r.type == "ICON" || true {
+      out.println("  res", r.type, r.name, "size=", r.size)
+      rk = rk + 1
+    }
+    k = k + 1
+  }
+
+  return 0
+}

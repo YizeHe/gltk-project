@@ -1,0 +1,41 @@
+// ch07_07_disasm.glk — 反汇编
+// .\gltk.exe run learn\examples\ch07_07_disasm.glk
+// .\gltk.exe run learn\examples\ch07_07_disasm.glk -- gltk.exe x64 15
+
+import out, fs, disasm, crypto
+
+fn main(args) {
+  let data = null
+  let arch = "x64"
+  let base = 0x1000
+  let count = 15
+
+  if len(args) >= 1 && fs.exists(args[0]) {
+    // 只反汇编文件开头一段，避免整文件
+    let path = args[0]
+    data = fs.read_range(path, 0, 256)
+    if len(args) >= 2 { arch = args[1] }
+    if len(args) >= 3 { count = int(args[2]) }
+    out.println("disasm file head", path)
+  } else {
+    data = crypto.hex_decode("90c34889c0")
+    out.println("sample bytes nop/ret/mov")
+  }
+
+  let insns = disasm.disasm(data, arch, base, count)
+  out.println("decoded=", len(insns), " arch=", arch)
+  for i in range(0, len(insns)) {
+    let insn = insns[i]
+    let line = ("" + insn.addr) + ": " + insn.bytes + "  " + insn.mnemonic
+    if insn.op_str != "" {
+      line = line + " " + insn.op_str
+    }
+    out.println(line)
+  }
+
+  let one = disasm.disasm_one(data, arch, base)
+  if one != null {
+    out.println("first mnemonic=", one.mnemonic)
+  }
+  return 0
+}

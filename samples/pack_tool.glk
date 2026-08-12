@@ -1,0 +1,38 @@
+// pack_tool.glk — thin glk front-end for packer (uses pack native)
+// Usage:
+//   gltk run samples/pack_tool.glk -- samples/pack_hello.glk work/pack_hello.exe
+//   gltk run samples/pack_tool.glk -- samples/pack_hello.glk work/pack_hello.exe --no-obfus
+
+import pack, out, fs
+
+fn main(args) {
+  if len(args) < 2 {
+    out.println("usage: pack_tool.glk -- <in.glk|glkb> <out.exe> [--no-obfus]")
+    return 1
+  }
+  let inPath = args[0]
+  let outPath = args[1]
+  let noOb = false
+  let i = 2
+  while i < len(args) {
+    if args[i] == "--no-obfus" {
+      noOb = true
+    }
+    i = i + 1
+  }
+  if !fs.exists(inPath) {
+    out.println("missing input", inPath)
+    return 2
+  }
+  out.println("packing", inPath, "->", outPath, "no_obfus=", noOb)
+  let r = pack.pack(inPath, outPath, {no_obfus: noOb})
+  if !r.ok {
+    out.println("FAIL", r.error)
+    return 3
+  }
+  out.println("ok output=", r.output)
+  out.println(" kind=", r.input_kind, " obfuscated=", r.obfuscated)
+  out.println(" glkb=", r.glkb_size, " cipher=", r.cipher_size, " exe=", r.exe_size)
+  out.println(" protos=", r.protos, " consts=", r.consts, " ms=", r.ms)
+  return 0
+}

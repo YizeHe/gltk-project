@@ -1,0 +1,64 @@
+// ch03_07_lambda.glk — 匿名函数 / 闭包（按值捕获）
+// .\gltk.exe run learn\examples\ch03_07_lambda.glk
+
+import out
+
+fn make_adder(base) {
+  // 返回一个闭包：捕获 base 的当前值（按值拷贝）
+  let f = fn(x) {
+    return x + base
+  }
+  return f
+}
+
+fn make_counter(start) {
+  // 错误示范直觉：若以为捕获引用，改 start 会影响闭包——实际上不会
+  let c = start
+  let tick = fn() {
+    // 只能读到创建闭包时的 c 拷贝；无法写回外层 c
+    return c
+  }
+  return tick
+}
+
+fn map_ints(arr, f) {
+  // 手写 map：对每个元素调用 f，打印结果（数组无动态 push 时演示用打印）
+  for v in arr {
+    out.println("map", v, "->", f(v))
+  }
+}
+
+fn main(args) {
+  // 1) 基本 lambda
+  let double = fn(x) { return x * 2 }
+  out.println("double(21)=", double(21))
+
+  // 2) 工厂闭包
+  let add10 = make_adder(10)
+  let add100 = make_adder(100)
+  out.println("add10(5)=", add10(5))
+  out.println("add100(5)=", add100(5))
+
+  // 3) 捕获外层局部
+  let prefix = "user:"
+  let tag = fn(id) {
+    return prefix + ("" + id)
+  }
+  out.println(tag(7))
+
+  // 4) 修改外层变量后，已创建的闭包仍用旧值（按值）
+  let n = 1
+  let show = fn() { return n }
+  out.println("show before=", show())
+  n = 99
+  out.println("show after n=99 ->", show(), " (仍是捕获时的 1)")
+
+  // 5) 高阶：传入 lambda
+  map_ints([1, 2, 3], fn(x) { return x * x })
+
+  // 6) 立即调用（IIFE 风格）
+  let v = fn(x) { return x + 1 }(41)
+  out.println("iife=", v)
+
+  return 0
+}

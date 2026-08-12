@@ -1,0 +1,36 @@
+// ch04_04_strings_core.glk — 字符串核心：拼接、插值、len、比较
+// .\gltk.exe run learn\examples\ch04_04_strings_core.glk
+
+import out
+
+fn main(args) {
+  let a = "Grok"
+  let b = "Lang"
+  out.println(a + b)
+  out.println(a + "-" + b)
+
+  let n = 42
+  out.println("id=" + ("" + n))
+  out.println("id=${n}")  // 插值
+
+  let path = "D:/samples/a.exe"
+  out.println("len path=", len(path))
+
+  // 比较
+  out.println("abc" == "abc")
+  out.println("abc" != "ABC")
+
+  // 多行报告模板
+  let file = "evil.bin"
+  let hits = 3
+  let report = """
+== Scan Report ==
+file: ${file}
+hits: ${hits}
+status: ${hits > 0 ? "FOUND" : "clean"}
+"""
+  out.println(report)
+
+  // 字符级：无内建 char 类型——用 str.slice 取子串（下一示例）
+  return 0
+}

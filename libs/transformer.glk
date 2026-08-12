@@ -1,0 +1,267 @@
+import tensor
+// GrokTorch GPT-1 Transformer Model
+// Functional style: model is a map, forward pass is a function
+
+// ============================================================
+//  Model hyperparameters
+// ============================================================
+
+fn gpt_config() {
+  return {
+    "vocab_size": 64,
+    "d_model": 64,
+    "n_heads": 4,
+    "head_dim": 16,
+    "n_layers": 4,
+    "ff_hidden": 256,
+    "max_seq": 64
+  }
+}
+
+// ============================================================
+//  Helper: collect parameters from a layer map
+// ============================================================
+
+fn collect_layer_params(layer, key_list) {
+  result = []
+  i = 0
+  while i < len(key_list) {
+    push(result, layer[key_list[i]])
+    i = i + 1
+  }
+  return result
+}
+
+// ============================================================
+//  Model creation
+// ============================================================
+
+fn gpt_create(cfg) {
+  d = cfg["d_model"]
+  v = cfg["vocab_size"]
+  ff = cfg["ff_hidden"]
+  max_seq = cfg["max_seq"]
+  n_layers = cfg["n_layers"]
+  n_heads = cfg["n_heads"]
+  hd = cfg["head_dim"]
+
+  // Embedding tables
+  tok_emb_w = tensor.mul(tensor.randn([v, d]), 0.02)
+  pos_emb_w = tensor.mul(tensor.randn([max_seq, d]), 0.02)
+
+  // Build layers
+  blocks = []
+  li = 0
+  while li < n_layers {
+    // LayerNorm 1 (pre-attention)
+    ln1_gamma = tensor.ones([d])
+    ln1_beta = tensor.zeros([d])
+
+    // Attention projections (one set per head for proper multi-head)
+    // For simplicity, project all heads at once: Q=Wq@x where Wq is [d, d]
+    attn_q_w = tensor.mul(tensor.randn([d, d]), 0.02)
+    attn_q_b = tensor.zeros([d])
+    attn_k_w = tensor.mul(tensor.randn([d, d]), 0.02)
+    attn_k_b = tensor.zeros([d])
+    attn_v_w = tensor.mul(tensor.randn([d, d]), 0.02)
+    attn_v_b = tensor.zeros([d])
+    attn_proj_w = tensor.mul(tensor.randn([d, d]), 0.02)
+    attn_proj_b = tensor.zeros([d])
+
+    // LayerNorm 2 (pre-FF)
+    ln2_gamma = tensor.ones([d])
+    ln2_beta = tensor.zeros([d])
+
+    // Feed-forward
+    ff_w1 = tensor.mul(tensor.randn([ff, d]), 0.02)
+    ff_b1 = tensor.zeros([ff])
+    ff_w2 = tensor.mul(tensor.randn([d, ff]), 0.02)
+    ff_b2 = tensor.zeros([d])
+
+    block = {
+      "ln1_gamma": ln1_gamma, "ln1_beta": ln1_beta,
+      "attn_q_w": attn_q_w, "attn_q_b": attn_q_b,
+      "attn_k_w": attn_k_w, "attn_k_b": attn_k_b,
+      "attn_v_w": attn_v_w, "attn_v_b": attn_v_b,
+      "attn_proj_w": attn_proj_w, "attn_proj_b": attn_proj_b,
+      "ln2_gamma": ln2_gamma, "ln2_beta": ln2_beta,
+      "ff_w1": ff_w1, "ff_b1": ff_b1,
+      "ff_w2": ff_w2, "ff_b2": ff_b2
+    }
+    push(blocks, block)
+    li = li + 1
+  }
+
+  // Final LayerNorm
+  lnf_gamma = tensor.ones([d])
+  lnf_beta = tensor.zeros([d])
+
+  // LM head
+  lm_head_w = tensor.mul(tensor.randn([v, d]), 0.02)
+  lm_head_b = tensor.zeros([v])
+
+  return {
+    "cfg": cfg,
+    "tok_emb_w": tok_emb_w,
+    "pos_emb_w": pos_emb_w,
+    "blocks": blocks,
+    "lnf_gamma": lnf_gamma,
+    "lnf_beta": lnf_beta,
+    "lm_head_w": lm_head_w,
+    "lm_head_b": lm_head_b
+  }
+}
+
+// ============================================================
+//  LayerNorm forward
+// ============================================================
+
+fn layernorm_forward(x, gamma, beta) {
+  // Global normalization approximation for [seq, d_model]
+  mean_val = tensor.to_value(tensor.mean(x))
+  centered = tensor.add(x, -mean_val)
+  sq = tensor.mul(centered, centered)
+  var_val = tensor.to_value(tensor.mean(sq))
+  std_val = var_val + 1e-5
+  // std_val is scalar, we need sqrt
+  std_tensor = tensor.fill([1], std_val)
+  std_scalar = tensor.to_value(tensor.sqrt(std_tensor))
+  normed = tensor.div(centered, std_scalar)
+  scaled = tensor.mul(normed, gamma)
+  return tensor.add(scaled, beta)
+}
+
+// ============================================================
+//  Single-head attention with pre-norm (uses native SDPA)
+// ============================================================
+
+fn attention_forward(x, q_w, q_b, k_w, k_b, v_w, v_b, proj_w, proj_b) {
+  // x: [seq, d_model]
+  // Linear projections
+  q = tensor.add(tensor.matmul(x, tensor.transpose(q_w)), q_b)
+  k = tensor.add(tensor.matmul(x, tensor.transpose(k_w)), k_b)
+  v = tensor.add(tensor.matmul(x, tensor.transpose(v_w)), v_b)
+
+  // Scaled dot-product attention with causal mask
+  attn_out = tensor.scaled_dot_product_attention(q, k, v)
+
+  // Output projection
+  proj_out = tensor.add(tensor.matmul(attn_out, tensor.transpose(proj_w)), proj_b)
+  return proj_out
+}
+
+// ============================================================
+//  Feed-forward forward
+// ============================================================
+
+fn ff_forward(x, w1, b1, w2, b2) {
+  // x: [seq, d_model], w1: [ff_hidden, d_model], w2: [d_model, ff_hidden]
+  h = tensor.add(tensor.matmul(x, tensor.transpose(w1)), b1)
+  a = tensor.gelu(h)
+  out = tensor.add(tensor.matmul(a, tensor.transpose(w2)), b2)
+  return out
+}
+
+// ============================================================
+//  Transformer block forward
+// ============================================================
+
+fn block_forward(x, block) {
+  // Pre-norm + attention
+  normed1 = layernorm_forward(x, block["ln1_gamma"], block["ln1_beta"])
+  attn_out = attention_forward(
+    normed1,
+    block["attn_q_w"], block["attn_q_b"],
+    block["attn_k_w"], block["attn_k_b"],
+    block["attn_v_w"], block["attn_v_b"],
+    block["attn_proj_w"], block["attn_proj_b"]
+  )
+  x = tensor.add(x, attn_out)
+
+  // Pre-norm + FF
+  normed2 = layernorm_forward(x, block["ln2_gamma"], block["ln2_beta"])
+  ff_out = ff_forward(normed2, block["ff_w1"], block["ff_b1"], block["ff_w2"], block["ff_b2"])
+  x = tensor.add(x, ff_out)
+
+  return x
+}
+
+// ============================================================
+//  GPT forward pass
+//  idx: array of int tokens [seq_len]
+//  Returns logits [seq_len, vocab_size]
+// ============================================================
+
+fn gpt_forward(model, idx) {
+  seq_len = len(idx)
+  cfg = model["cfg"]
+  d_model = cfg["d_model"]
+
+  // Position indices
+  pos = range(0, seq_len)
+
+  // Token + position embeddings
+  tok_emb = tensor.embed_lookup(model["tok_emb_w"], idx)
+  pos_emb = tensor.embed_lookup(model["pos_emb_w"], pos)
+  x = tensor.add(tok_emb, pos_emb)
+
+  // Transformer blocks
+  blocks = model["blocks"]
+  bi = 0
+  while bi < len(blocks) {
+    x = block_forward(x, blocks[bi])
+    bi = bi + 1
+  }
+
+  // Final LayerNorm
+  x = layernorm_forward(x, model["lnf_gamma"], model["lnf_beta"])
+
+  // LM head
+  logits = tensor.add(tensor.matmul(x, tensor.transpose(model["lm_head_w"])), model["lm_head_b"])
+
+  return logits
+}
+
+// ============================================================
+//  Collect all trainable parameters
+// ============================================================
+
+fn gpt_parameters(model) {
+  params = []
+
+  // Embeddings
+  push(params, model["tok_emb_w"])
+  push(params, model["pos_emb_w"])
+
+  // Blocks
+  blocks = model["blocks"]
+  bi = 0
+  while bi < len(blocks) {
+    b = blocks[bi]
+    push(params, b["ln1_gamma"])
+    push(params, b["ln1_beta"])
+    push(params, b["attn_q_w"])
+    push(params, b["attn_q_b"])
+    push(params, b["attn_k_w"])
+    push(params, b["attn_k_b"])
+    push(params, b["attn_v_w"])
+    push(params, b["attn_v_b"])
+    push(params, b["attn_proj_w"])
+    push(params, b["attn_proj_b"])
+    push(params, b["ln2_gamma"])
+    push(params, b["ln2_beta"])
+    push(params, b["ff_w1"])
+    push(params, b["ff_b1"])
+    push(params, b["ff_w2"])
+    push(params, b["ff_b2"])
+    bi = bi + 1
+  }
+
+  // Final LN + LM head
+  push(params, model["lnf_gamma"])
+  push(params, model["lnf_beta"])
+  push(params, model["lm_head_w"])
+  push(params, model["lm_head_b"])
+
+  return params
+}

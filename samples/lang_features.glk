@@ -1,0 +1,94 @@
+// Language features smoke test: break/continue, switch, ternary,
+// try/catch/throw, for-in maps, lambda/closures, multiline + interp strings.
+// Note: bare `import str` shadows builtin str(); use (""+x) for conversion.
+import out
+import str
+
+fn main(args) {
+  // --- break / continue ---
+  let s = 0
+  let i = 0
+  while i < 10 {
+    i = i + 1
+    if i == 3 {
+      continue
+    }
+    if i == 8 {
+      break
+    }
+    s = s + i
+  }
+  // i steps 1,2,4,5,6,7 → s = 25
+  out.println("break_continue=" + ("" + s))
+
+  // --- switch ---
+  let sw = 0
+  switch 2 {
+    case 1:
+      sw = 10
+    case 2, 3:
+      sw = 20
+    default:
+      sw = 30
+  }
+  out.println("switch=" + ("" + sw))
+
+  // --- ternary ---
+  let t = (s > 0) ? 1 : 0
+  out.println("ternary=" + ("" + t))
+
+  // --- try/catch/throw ---
+  let caught = ""
+  try {
+    throw "boom"
+  } catch e {
+    caught = e
+  }
+  out.println("catch=" + caught)
+
+  // --- for-in array ---
+  let arrSum = 0
+  for x in [1, 2, 3] {
+    arrSum = arrSum + x
+  }
+  out.println("for_arr=" + ("" + arrSum))
+
+  // --- for-in map (keys) ---
+  let m = {a: 1, b: 2}
+  let mk = ""
+  for k in m {
+    mk = mk + k
+  }
+  // key order not guaranteed; just non-empty
+  out.println("for_map_len=" + ("" + len(mk)))
+
+  // --- lambda + capture-by-copy ---
+  let base = 10
+  let add = fn(x) {
+    return x + base
+  }
+  out.println("lambda=" + ("" + add(5)))
+
+  // --- string interp + multiline ---
+  let name = "Grok"
+  let msg = "hello ${name}"
+  out.println("interp=" + msg)
+  let multi = """line1
+line2"""
+  out.println("multi_ok=" + ("" + str.contains(multi, "line2")))
+
+  // --- str.slice ---
+  out.println("slice=" + str.slice("abcdef", 1, 4))
+
+  // nested break in for
+  let fb = 0
+  for n in range(0, 5) {
+    if n == 3 {
+      break
+    }
+    fb = fb + n
+  }
+  out.println("for_break=" + ("" + fb))
+
+  return 0
+}

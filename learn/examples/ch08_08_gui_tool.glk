@@ -1,0 +1,108 @@
+// ch08_08_gui_tool.glk — 实战小工具：HTTP GET + 日志 GUI
+// Windows 交互:
+//   .\gltk.exe run learn\examples\ch08_08_gui_tool.glk
+// 点 Fetch 请求 URL；点 Quit 退出
+//
+// 注意：http 在 UI 回调里会卡住界面，示例仅作教学；生产应用 async.spawn
+
+import out, gui, http, json
+
+let g_url = null
+let g_log = null
+let g_status = null
+
+fn log_line(msg) {
+  out.println(msg)
+  if typeof(g_log) == "map" {
+    gui.append_text(g_log, msg + "\n")
+  }
+}
+
+fn set_status(msg) {
+  if typeof(g_status) == "map" {
+    gui.set_text(g_status, msg)
+  }
+}
+
+fn on_fetch() {
+  log_line("[Fetch] click")
+  set_status("status: fetching...")
+  let url = gui.get_text(g_url)
+  if url == "" {
+    url = "https://httpbin.org/get"
+  }
+  log_line("GET " + url)
+
+  let r = http.get(url, {
+    timeout: 20,
+    user_agent: "gltk-ch08-gui-tool",
+    insecure: true
+  })
+
+  if !r.ok {
+    set_status("status: FAIL")
+    log_line("error: " + r.error)
+    gui.msgbox(r.error, "HTTP error")
+    return
+  }
+
+  set_status("status: HTTP " + ("" + r.status) + " len=" + ("" + len(r.body)))
+  log_line("status=" + ("" + r.status) + " bytes=" + ("" + len(r.body)))
+
+  // 尝试 JSON 美化一行
+  if r.status == 200 {
+    let j = json.parse(r.body)
+    if typeof(j) == "map" {
+      log_line("json keys ok, stringify head:")
+      let s = json.stringify(j)
+      if len(s) > 200 {
+        // 无 slice 内建时用 str
+      }
+      log_line(s)
+    } else {
+      log_line(r.body)
+    }
+  }
+  gui.msgbox("Done status=" + ("" + r.status), "Fetch")
+}
+
+fn on_clear() {
+  if typeof(g_log) == "map" {
+    gui.set_text(g_log, "")
+  }
+  set_status("status: cleared")
+}
+
+fn on_quit() {
+  gui.quit()
+}
+
+fn main(args) {
+  if !gui.available() {
+    out.println("GUI not available")
+    return 1
+  }
+  gui.init()
+  let w = gui.window("CH08 HTTP Tool", 560, 420)
+
+  gui.label(w, "URL:", 16, 16, 40, 24)
+  g_url = gui.lineedit(w, 60, 14, 380, 28)
+  gui.set_text(g_url, "https://httpbin.org/get")
+
+  let b1 = gui.button(w, "Fetch", 16, 56, 90, 32)
+  let b2 = gui.button(w, "Clear", 116, 56, 90, 32)
+  let b3 = gui.button(w, "Quit", 216, 56, 90, 32)
+
+  g_status = gui.label(w, "status: idle", 16, 100, 500, 24)
+  g_log = gui.textedit(w, 16, 130, 520, 260)
+  gui.set_text(g_log, "CH08 tool ready.\nEdit URL and click Fetch.\n")
+
+  gui.on_click(b1, on_fetch)
+  gui.on_click(b2, on_clear)
+  gui.on_click(b3, on_quit)
+
+  gui.show(w)
+  out.println("gui.run — interact then Quit")
+  gui.run()
+  return 0
+}

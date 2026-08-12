@@ -1,0 +1,25 @@
+// ch09_01_tool.glk — 将被 pack 的示例工具（打印版本与参数）
+// .\gltk.exe run learn\examples\ch09_01_tool.glk -- alice
+// .\gltk.exe pack learn\examples\ch09_01_tool.glk -o learn\examples\_tmp_ch09_tool.exe
+
+import out, crypto
+
+fn main(args) {
+  out.println("=== GLTK ch09 tool ===")
+  out.println("build: learn chapter 9 pack demo")
+  let who = "world"
+  if len(args) >= 1 {
+    who = args[0]
+  }
+  out.println("hello, " + who)
+  out.println("sha256(demo)=", crypto.sha256_hex("ch09-pack-demo"))
+  let i = 0
+  let s = 0
+  while i < 100 {
+    s = s + i
+    i = i + 1
+  }
+  out.println("sum0_99=", s)
+  out.println("ok")
+  return 0
+}

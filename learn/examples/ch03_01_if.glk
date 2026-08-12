@@ -1,0 +1,71 @@
+// ch03_01_if.glk — if / else if / else
+// .\gltk.exe run learn\examples\ch03_01_if.glk
+
+import out
+
+fn grade_of(score) {
+  if score >= 90 {
+    return "A"
+  } else if score >= 80 {
+    return "B"
+  } else if score >= 60 {
+    return "C"
+  } else {
+    return "D"
+  }
+}
+
+fn main(args) {
+  let x = 2
+
+  // 基本 if
+  if x > 0 {
+    out.println("positive")
+  }
+
+  // if-else
+  if x == 0 {
+    out.println("zero")
+  } else {
+    out.println("non-zero")
+  }
+
+  // else if 链
+  if x == 1 {
+    out.println("one")
+  } else if x == 2 {
+    out.println("two")
+  } else if x == 3 {
+    out.println("three")
+  } else {
+    out.println("other")
+  }
+
+  // 条件用真值：空串为假
+  let name = ""
+  if name {
+    out.println("has name")
+  } else {
+    out.println("empty name")
+  }
+
+  // 嵌套
+  let a = 5
+  let b = 3
+  if a > b {
+    if a - b > 1 {
+      out.println("a much greater")
+    }
+  }
+
+  // 函数内分支
+  out.println("75 ->", grade_of(75))
+  out.println("92 ->", grade_of(92))
+  out.println("50 ->", grade_of(50))
+
+  // 与三元对比（表达式级）
+  let tag = x == 2 ? "is-two" : "not-two"
+  out.println("tag=", tag)
+
+  return 0
+}

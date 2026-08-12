@@ -1,0 +1,114 @@
+// gtamacro_unpack.glk — YourCrushLY / GTAMacro reverse WITHOUT Python
+// Enigma + Ahk2Exe + ScriptGuard2 → plain AHK via native ahk.decrypt_rcdata
+//
+// Usage (from gltk/):
+//   .\gltk.exe run samples\gtamacro_unpack.glk
+//   .\gltk.exe run samples\gtamacro_unpack.glk -- "testfile\NEW\GTAMacro (1).exe" work\gtamacro_gltk
+
+import pe, fs, out, str, ahk, bin
+
+fn main(args) {
+  let sample = "testfile\\NEW\\GTAMacro (1).exe"
+  let outDir = "work\\gtamacro_gltk"
+  if len(args) >= 1 { sample = args[0] }
+  if len(args) >= 2 { outDir = args[1] }
+
+  out.println("=== GLTK GTAMacro reverse (ScriptGuard2, no Python) ===")
+  out.println("sample: " + sample)
+  out.println("out:    " + outDir)
+
+  if !fs.exists(sample) {
+    out.println("ERROR: sample not found")
+    return 1
+  }
+
+  fs.mkdir_all(outDir)
+
+  // --- PE triage ---
+  out.println("--- pe.summary ---")
+  let psi = pe.summary(sample)
+  out.println("size=", psi.size, " overlay=", psi.overlay_size, " sections=", typeof(psi.sections))
+  if typeof(psi.markers) == "array" {
+    let mi = 0
+    while mi < len(psi.markers) {
+      out.println("  marker:", psi.markers[mi])
+      mi = mi + 1
+    }
+  }
+
+  // --- extract RCDATA via pe.parse ---
+  out.println("--- pe.parse resources ---")
+  let data = fs.read_bytes(sample)
+  let info = pe.parse(data, false)
+  let rcpath = outDir + "\\RCDATA_1.bin"
+  let found = false
+  let rcsize = 0
+  if typeof(info.resources) == "array" {
+    let i = 0
+    while i < len(info.resources) {
+      let r = info.resources[i]
+      let t = "" + r.type
+      let n = "" + r.name
+      if t == "RCDATA" {
+        out.println("RCDATA name=", n, " size=", r.size)
+        if typeof(r.data) == "bytes" && len(r.data) > 1000 {
+          // prefer largest / first big RCDATA (script)
+          if !found || r.size > rcsize {
+            fs.write_bytes(rcpath, r.data)
+            rcsize = r.size
+            found = true
+          }
+        }
+      }
+      i = i + 1
+    }
+  }
+  if !found {
+    out.println("ERROR: no RCDATA blob extracted")
+    return 2
+  }
+  out.println("wrote", rcpath, "size", rcsize)
+
+  // --- ScriptGuard2 detect + decrypt ---
+  out.println("--- ahk.is_scriptguard2 ---")
+  let is2 = ahk.is_scriptguard2(rcpath)
+  out.println("sg2=", is2)
+
+  out.println("--- ahk.decrypt_rcdata (native SG2) ---")
+  let outAhk = outDir + "\\script_decrypted.ahk"
+  let r = ahk.decrypt_rcdata(rcpath, outAhk)
+  if !r.ok {
+    out.println("DECRYPT FAIL:", r.error)
+    return 3
+  }
+  out.println("ok algo=", r.algo, " dwords=", r.dwords, " file_iv=", r.file_iv)
+  out.println("plain_bytes=", len(r.plain), " script_len=", r.script_len)
+  out.println("wrote", outAhk)
+
+  // sanity markers
+  let script = r.script
+  let hits = ""
+  if str.contains(script, "YourCrushLY") { hits = hits + " YourCrushLY" }
+  if str.contains(script, "ListLines") { hits = hits + " ListLines" }
+  if str.contains(script, "SCRIPT_VERSION") { hits = hits + " SCRIPT_VERSION" }
+  if str.contains(script, "GTA5") { hits = hits + " GTA5" }
+  if str.contains(script, "macro_payload") { hits = hits + " macro_payload" }
+  if str.contains(script, "2.3.1.6") { hits = hits + " v2.3.1.6" }
+  out.println("markers:" + hits)
+
+  // mini report
+  let rep = "# GTAMacro reverse (pure GLTK)\n\n"
+  rep = rep + "- sample: `" + sample + "`\n"
+  rep = rep + "- size: " + psi.size + "\n"
+  rep = rep + "- RCDATA: " + rcsize + " bytes\n"
+  rep = rep + "- algo: " + r.algo + "\n"
+  rep = rep + "- file_iv: " + r.file_iv + "\n"
+  rep = rep + "- dwords: " + r.dwords + "\n"
+  rep = rep + "- script_len: " + r.script_len + "\n"
+  rep = rep + "- markers:" + hits + "\n"
+  rep = rep + "- out: `" + outAhk + "`\n"
+  fs.write_text(outDir + "\\REPORT_GLTK.md", rep)
+  out.println("wrote " + outDir + "\\REPORT_GLTK.md")
+  out.println("=== done (no Python) ===")
+  return 0
+}

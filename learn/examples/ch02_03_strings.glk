@@ -1,0 +1,55 @@
+// learn/examples/ch02_03_strings.glk
+// 第 2 章：字符串、转义、多行、插值、拼接
+// 运行: .\gltk.exe run learn\examples\ch02_03_strings.glk
+
+import out
+
+fn main(args) {
+  // ---- 双引号 / 单引号 ----
+  let s1 = "hello"
+  let s2 = 'world'
+  out.println(s1, s2)
+
+  // ---- 转义 ----
+  out.println("line1\nline2")
+  out.println("tab\there")
+  out.println("quote \" and \\ and ' ok")
+  // \xHH 十六进制字节（ASCII 范围常用）
+  out.println("A as hex escape: \x41")
+
+  // ---- 拼接：任一端是字符串则整体当字符串 ----
+  let n = 42
+  out.println("answer=" + n)
+  out.println("" + true + " " + null)
+
+  // 推荐把数字转字符串时用 ""+x，避免依赖可能被模块遮蔽的 str()
+  out.println("port=" + ("" + 8080))
+
+  // ---- 插值 ${expr}（双引号内）----
+  let name = "Grok"
+  let ver = 5
+  out.println("hello ${name}, v${ver}")
+  out.println("1+2=${1 + 2}")
+
+  // ---- 多行字符串 """...""" ----
+  let block = """first line
+second line
+third"""
+  out.println("--- block ---")
+  out.println(block)
+  out.println("--- end ---")
+
+  // 多行里也可以插值
+  let tool = "gltk"
+  let multi = """
+Usage:
+  ${tool} run app.glk
+  ${tool} pack app.glk -o app.exe
+"""
+  out.println(multi)
+
+  // ---- 长度 ----
+  out.println("len(hello) =", len("hello"))
+
+  return 0
+}

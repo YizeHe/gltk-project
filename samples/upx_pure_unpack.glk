@@ -1,0 +1,43 @@
+// upx_pure_unpack.glk — pure GrokLang UPX PE unpacker CLI (no Go upx module)
+// Usage:
+//   gltk run samples/upx_pure_unpack.glk -- <in.exe> [out.exe]
+import fs, out, bin
+import "stdlib/upx_pure.glk" as upx_pure
+
+fn main(args) {
+  if len(args) < 1 {
+    out.println("usage: gltk run samples/upx_pure_unpack.glk -- <in.exe> [out.exe]")
+    return 1
+  }
+  let inp = args[0]
+  if !fs.exists(inp) {
+    out.println("missing", inp)
+    return 1
+  }
+  let data = fs.read_bytes(inp)
+  let info = upx_pure.info(data)
+  out.println("is_upx=", info.is_upx, " version=", info.version_str, " method=", info.method_name)
+  out.println("u_len=", info.u_len, " c_len=", info.c_len, " filter=", info.filter)
+  out.println("upx1_ptr=", info.upx1_ptr, " upx1_raw=", info.upx1_raw)
+  if info.is_upx != true {
+    out.println("not UPX packed")
+    return 2
+  }
+  let outp = inp + ".pure.unpacked.exe"
+  if len(args) >= 2 {
+    outp = args[1]
+  }
+  out.println("unpacking (pure LZMA)...")
+  let r = upx_pure.unpack(data)
+  if r.ok != true {
+    out.println("FAIL", r.error)
+    return 3
+  }
+  fs.write_bytes(outp, r.data)
+  out.println("WROTE", outp, " size=", r.size)
+  out.println("note=", r.note)
+  if bin.len(r.data) >= 2 {
+    out.println("mz=", bin.u8(r.data, 0), bin.u8(r.data, 1))
+  }
+  return 0
+}

@@ -1,0 +1,36 @@
+// gui_smoke.glk — non-blocking smoke: create widgets, no long message loop
+// Creates window then quits immediately via on_close + quit after init checks.
+// For full interactive UI use gui_counter.glk / gui_hello.glk
+import gui, out
+
+fn main(args) {
+  out.println("=== gui smoke ===")
+  if !gui.available() {
+    out.println("FAIL: gui.available=false")
+    return 2
+  }
+  out.println("available=true version=", gui.version())
+  gui.init()
+  let w = gui.window("GLTK smoke", 400, 200)
+  if typeof(w) != "map" {
+    out.println("FAIL: window null")
+    return 3
+  }
+  out.println("window ok id=", w.id)
+  let lab = gui.label(w, "smoke label", 10, 10, 300, 24)
+  let ed = gui.lineedit(w, 10, 40, 200, 28)
+  gui.set_text(ed, "hello")
+  let t = gui.get_text(ed)
+  out.println("lineedit text=", t)
+  let btn = gui.button(w, "OK", 10, 80, 80, 28)
+  let te = gui.textedit(w, 10, 120, 360, 60)
+  gui.set_text(te, "ok")
+  gui.append_text(te, "\nappended")
+  out.println("widgets created")
+  // show briefly without blocking forever: set on_close then quit
+  gui.show(w)
+  // Do not call gui.run() — smoke only verifies create path.
+  // Interactive demos call gui.run().
+  out.println("PASS gui smoke (create/show, no message loop)")
+  return 0
+}

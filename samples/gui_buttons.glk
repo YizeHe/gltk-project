@@ -1,0 +1,89 @@
+// gui_buttons.glk — simple multi-button GUI
+//   gltk run samples/gui_buttons.glk
+
+import gui, out
+
+let g_status = null
+let g_log = null
+let g_score = 0
+
+fn set_status(msg) {
+  gui.set_text(g_status, msg)
+  gui.append_text(g_log, msg + "\n")
+}
+
+fn on_red() {
+  set_status("You clicked RED")
+}
+
+fn on_green() {
+  set_status("You clicked GREEN")
+}
+
+fn on_blue() {
+  set_status("You clicked BLUE")
+}
+
+fn on_plus() {
+  g_score = g_score + 1
+  set_status("Score: " + ("" + g_score))
+}
+
+fn on_minus() {
+  g_score = g_score - 1
+  set_status("Score: " + ("" + g_score))
+}
+
+fn on_clear() {
+  g_score = 0
+  gui.set_text(g_log, "")
+  set_status("Cleared. Score: 0")
+}
+
+fn on_about() {
+  gui.msgbox("GLTK button demo\nClick the colored buttons or +/- score.", "About")
+}
+
+fn on_quit() {
+  gui.quit()
+}
+
+fn main(args) {
+  if !gui.available() {
+    out.println("gui not available")
+    return 1
+  }
+  gui.init()
+
+  let w = gui.window("GLTK Buttons", 460, 340)
+
+  gui.label(w, "Pick a button:", 20, 16, 200, 24)
+  g_status = gui.label(w, "Ready.", 20, 44, 400, 24)
+
+  let b_red = gui.button(w, "Red", 20, 80, 100, 36)
+  let b_green = gui.button(w, "Green", 130, 80, 100, 36)
+  let b_blue = gui.button(w, "Blue", 240, 80, 100, 36)
+
+  let b_plus = gui.button(w, "+1", 20, 130, 80, 32)
+  let b_minus = gui.button(w, "-1", 110, 130, 80, 32)
+  let b_clear = gui.button(w, "Clear", 200, 130, 80, 32)
+  let b_about = gui.button(w, "About", 290, 130, 80, 32)
+  let b_quit = gui.button(w, "Quit", 380, 130, 60, 32)
+
+  g_log = gui.textedit(w, 20, 180, 420, 130)
+  gui.set_text(g_log, "Button log:\n")
+
+  gui.on_click(b_red, on_red)
+  gui.on_click(b_green, on_green)
+  gui.on_click(b_blue, on_blue)
+  gui.on_click(b_plus, on_plus)
+  gui.on_click(b_minus, on_minus)
+  gui.on_click(b_clear, on_clear)
+  gui.on_click(b_about, on_about)
+  gui.on_click(b_quit, on_quit)
+
+  gui.show(w)
+  out.println("gui_buttons running — click buttons, Quit to exit")
+  gui.run()
+  return 0
+}

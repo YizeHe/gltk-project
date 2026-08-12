@@ -1,0 +1,88 @@
+// gui_re_workbench.glk — reverse-engineering workbench UI
+// gltk run samples/gui_re_workbench.glk [-- path]
+import gui, pe, file, fs, out, str
+
+// UI handles as globals (set in main before run)
+let g_path = null
+let g_log = null
+
+fn on_browse() {
+    let p = gui.open_file("PE/EXE\x00*.exe;*.dll\x00All\x00*.*\x00")
+    if p != "" {
+        gui.set_text(g_path, p)
+        gui.append_text(g_log, "Selected: " + p + "\n")
+    }
+}
+
+fn on_analyze() {
+    let p = gui.get_text(g_path)
+    if p == "" {
+        gui.msgbox("Enter a file path", "RE")
+        return
+    }
+    gui.append_text(g_log, "==== " + p + " ====\n")
+    if !fs.exists(p) {
+        gui.append_text(g_log, "ERROR: file not found\n")
+        return
+    }
+    let det = file.detect_path(p)
+    gui.append_text(g_log, "format=" + det.format + " subtype=" + det.subtype + " size=" + det.size + "\n")
+    gui.append_text(g_log, "magic=" + det.magic + "\n")
+    if det.format == "pe" || det.format == "mz" {
+        let info = pe.summary(p)
+        if info.ok == false {
+            gui.append_text(g_log, "pe error: " + info.error + "\n")
+        } else {
+            gui.append_text(g_log, "arch=" + info.machine_name + " subsystem=" + info.subsystem_name + "\n")
+            gui.append_text(g_log, "sections=" + info.section_count + " imports=" + info.import_count + " overlay=" + info.overlay_size + "\n")
+            if typeof(info.markers) == "array" {
+                let i = 0
+                while i < len(info.markers) {
+                    gui.append_text(g_log, "  marker: " + info.markers[i] + "\n")
+                    i = i + 1
+                }
+            }
+            if typeof(info.interesting) == "array" {
+                let j = 0
+                let lim = len(info.interesting)
+                if lim > 15 {
+                    lim = 15
+                }
+                while j < lim {
+                    gui.append_text(g_log, "  * " + info.interesting[j].text + "\n")
+                    j = j + 1
+                }
+            }
+        }
+    } else {
+        gui.append_text(g_log, "(non-PE — skipped pe.summary)\n")
+    }
+    gui.append_text(g_log, "---- done ----\n")
+}
+
+fn main(args) {
+    if !gui.available() {
+        out.println("gui requires Windows + CUI")
+        return 1
+    }
+    gui.init()
+    let w = gui.window("GrokLang RE Workbench", 900, 620)
+    gui.label(w, "Sample path:", 16, 16, 100, 24)
+    g_path = gui.lineedit(w, 110, 14, 560, 28)
+    if len(args) > 0 {
+        gui.set_text(g_path, args[0])
+    } else {
+        gui.set_text(g_path, "..\\GTAOL\\GTAOL Ultra Macro (1).exe")
+    }
+    let btn_browse = gui.button(w, "Browse...", 680, 12, 90, 32)
+    let btn_go = gui.button(w, "Analyze", 780, 12, 90, 32)
+    g_log = gui.textedit(w, 16, 56, 860, 520)
+    gui.set_text(g_log, "Ready. Click Analyze for pe.summary / file.detect (static).\n")
+
+    gui.on_click(btn_browse, on_browse)
+    gui.on_click(btn_go, on_analyze)
+    gui.show(w)
+    out.println("RE workbench running — close window to exit")
+    gui.run()
+    return 0
+}

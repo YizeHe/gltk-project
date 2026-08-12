@@ -1,0 +1,49 @@
+// ch04_05_str_module.glk — import str 工具箱
+// .\gltk.exe run learn\examples\ch04_05_str_module.glk
+// 注意：import str 后不要写 str(x) 转换，用 ""+x 或 to_str
+
+import out, str
+
+fn main(args) {
+  let s = "  Hello, GrokLang!  "
+
+  out.println("lower:", str.lower(s))
+  out.println("upper:", str.upper(s))
+  out.println("trim: [", str.trim(s), "]")
+  out.println("len module:", str.len(s), " builtin len:", len(s))
+
+  out.println("contains Grok?", str.contains(s, "Grok"))
+  out.println("starts Hello?", str.starts_with(str.trim(s), "Hello"))
+  out.println("ends !?", str.ends_with(str.trim(s), "!"))
+  // 别名
+  out.println("has_prefix:", str.has_prefix("cmd.exe", "cmd"))
+  out.println("has_suffix:", str.has_suffix("app.asar", ".asar"))
+
+  out.println("index_of o =", str.index_of("hello", "o"))
+  out.println("slice(1,5)=", str.slice("abcdef", 1, 5))
+  out.println("substr alias=", str.substr("abcdef", 2, 4))
+
+  out.println("replace:", str.replace("a-b-a-b", "-", "/"))
+  out.println("repeat:", str.repeat("ha", 3))
+
+  let parts = str.split("pe,fs,out,bin", ",")
+  out.println("split len=", len(parts))
+  for i in range(0, len(parts)) {
+    out.println(" ", i, parts[i])
+  }
+
+  // join：数组 -> 字符串
+  out.println("join:", str.join(parts, " | "))
+
+  // URL
+  out.println("url:", str.url_encode("a b&c=1"))
+
+  // 组合：规范化扩展名判断
+  let file = "Payload.EXE"
+  let lower = str.lower(file)
+  if str.ends_with(lower, ".exe") {
+    out.println("kind: pe-executable (by suffix)")
+  }
+
+  return 0
+}

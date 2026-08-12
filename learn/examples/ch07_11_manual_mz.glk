@@ -1,0 +1,61 @@
+// ch07_11_manual_mz.glk — 不用 pe.parse，纯 bin 解析 e_lfanew / PE 签名
+// .\gltk.exe run learn\examples\ch07_11_manual_mz.glk -- learn\testdata\re\04_mz_pe_sig_stub.bin
+// .\gltk.exe run learn\examples\ch07_11_manual_mz.glk -- gltk.exe
+
+import out, fs, bin
+
+fn parse_dos_pe_sig(path) {
+  let r = {ok: false, error: "", mz: false, e_lfanew: 0, pe_sig: false, machine: 0}
+  if !fs.exists(path) {
+    r.error = "missing"
+    return r
+  }
+  let size = fs.file_size(path)
+  if size < 0x40 {
+    r.error = "too small"
+    return r
+  }
+  let head = fs.read_range(path, 0, size < 512 ? size : 512)
+  if bin.u16le(head, 0) != 0x5A4D {
+    r.error = "no MZ"
+    return r
+  }
+  r.mz = true
+  let lfanew = bin.u32le(head, 0x3C)
+  r.e_lfanew = lfanew
+  if lfanew + 6 > bin.len(head) {
+    // need more
+    if lfanew + 6 > size {
+      r.error = "e_lfanew OOB"
+      return r
+    }
+    head = fs.read_range(path, 0, lfanew + 64)
+  }
+  // PE\0\0
+  let p0 = bin.u8(head, lfanew)
+  let p1 = bin.u8(head, lfanew + 1)
+  let p2 = bin.u8(head, lfanew + 2)
+  let p3 = bin.u8(head, lfanew + 3)
+  r.pe_sig = (p0 == 0x50 && p1 == 0x45 && p2 == 0 && p3 == 0)
+  if r.pe_sig {
+    r.machine = bin.u16le(head, lfanew + 4)
+  }
+  r.ok = true
+  return r
+}
+
+fn main(args) {
+  let path = "learn/testdata/re/04_mz_pe_sig_stub.bin"
+  if len(args) > 0 { path = args[0] }
+  let r = parse_dos_pe_sig(path)
+  out.println("path=", path)
+  out.println("ok=", r.ok, " err=", r.error)
+  out.println("mz=", r.mz, " e_lfanew=", r.e_lfanew)
+  out.println("pe_sig=", r.pe_sig, " machine=", r.machine)
+  if r.machine == 0x8664 {
+    out.println("arch hint: AMD64")
+  } else if r.machine == 0x14c {
+    out.println("arch hint: i386")
+  }
+  return 0
+}

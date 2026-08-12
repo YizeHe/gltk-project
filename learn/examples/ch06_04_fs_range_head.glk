@@ -1,0 +1,38 @@
+// ch06_04_fs_range_head.glk — read_range / head / tail
+// .\gltk.exe run learn\examples\ch06_04_fs_range_head.glk
+
+import out, fs, bin
+
+fn main(args) {
+  let path = "learn/examples/ch01_hello.glk"
+  if !fs.exists(path) {
+    out.println("missing", path)
+    return 1
+  }
+
+  out.println("file_size=", fs.file_size(path))
+
+  let head = fs.head(path, 64)
+  out.println("head typeof=", typeof(head), " len=", len("" + head) > 0)
+  // head 可能是 string 或 bytes
+  out.println("head preview:")
+  out.println(head)
+
+  let tail = fs.tail(path, 40)
+  out.println("tail preview:")
+  out.println(tail)
+
+  // 读一段原始字节
+  let chunk = fs.read_range(path, 0, 16)
+  out.println("read_range 0:16 typeof=", typeof(chunk))
+  // 若是 bytes：
+  // 尝试 bin
+  try {
+    out.println("as bytes len=", bin.len(chunk))
+    out.println("first u8=", bin.u8(chunk, 0))
+  } catch e {
+    out.println("bin view skip:", e)
+  }
+
+  return 0
+}

@@ -1,0 +1,33 @@
+// ch09_03_pack_via_api.glk — 用 pack native 打包
+// .\gltk.exe run learn\examples\ch09_03_pack_via_api.glk
+
+import out, pack, fs
+
+fn main(args) {
+  let inPath = "learn/examples/ch09_01_tool.glk"
+  let outPath = "learn/examples/_tmp_ch09_via_api.exe"
+  let noOb = false
+  if len(args) >= 1 { inPath = args[0] }
+  if len(args) >= 2 { outPath = args[1] }
+  if len(args) >= 3 && args[2] == "--no-obfus" { noOb = true }
+
+  if !fs.exists(inPath) {
+    out.println("missing", inPath)
+    return 1
+  }
+
+  out.println("pack", inPath, "->", outPath, " no_obfus=", noOb)
+  let r = pack.pack(inPath, outPath, {no_obfus: noOb})
+  if !r.ok {
+    out.println("FAIL", r.error)
+    return 2
+  }
+  out.println("ok")
+  out.println("  obfuscated=", r.obfuscated)
+  out.println("  glkb_size=", r.glkb_size)
+  out.println("  cipher_size=", r.cipher_size)
+  out.println("  exe_size=", r.exe_size)
+  out.println("  protos=", r.protos, " consts=", r.consts, " ms=", r.ms)
+  out.println("  output=", r.output)
+  return 0
+}

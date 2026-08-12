@@ -1,0 +1,48 @@
+// patch_demo.glk — binary patch / checksum demo (Phase 3 bin APIs)
+import bin, fs, out
+
+fn main(args) {
+  let data = null
+  let path = ""
+  if len(args) >= 1 {
+    path = args[0]
+    if !fs.exists(path) {
+      out.println("file not found: " + path)
+      return 1
+    }
+    data = fs.read_bytes(path)
+  } else {
+    // synthetic buffer: "AAAA" + junk
+    data = bin.concat("HelloWorld", bin.from_u32le([0x11223344]))
+  }
+  out.println("input size=" + ("" + bin.len(data)))
+  out.println("sum8=" + ("" + bin.checksum_sum8(data)) + " crc32=" + ("" + bin.crc32(data)))
+
+  // write patch at offset 0
+  let patched = bin.write_at(data, 0, "Hi!!")
+  out.println("write_at u8[0]=" + ("" + bin.u8(patched, 0)) + " u8[1]=" + ("" + bin.u8(patched, 1)))
+
+  // fill 4 zeros at offset 4
+  let filled = bin.fill(patched, 4, 4, 0)
+  out.println("fill size=" + ("" + bin.len(filled)))
+
+  // NOP 5 bytes at offset 2
+  let nopped = bin.nop_fill(filled, 2, 5)
+  out.println("nop_fill u8[2]=" + ("" + bin.u8(nopped, 2)) + " (expect 144=0x90)")
+
+  // endian swaps
+  let s16 = bin.swap16(nopped)
+  let s32 = bin.swap32(nopped)
+  out.println("swap16[0..1] " + ("" + bin.u8(s16, 0)) + " " + ("" + bin.u8(s16, 1)))
+  out.println("swap32[0..3] " + ("" + bin.u8(s32, 0)) + " " + ("" + bin.u8(s32, 1)) + " " + ("" + bin.u8(s32, 2)) + " " + ("" + bin.u8(s32, 3)))
+
+  let crc = bin.crc32(nopped)
+  out.println("patched crc32: " + ("" + crc))
+
+  if path != "" {
+    let outp = path + ".patched"
+    fs.write_bytes(outp, nopped)
+    out.println("wrote " + outp)
+  }
+  return 0
+}

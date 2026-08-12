@@ -1,0 +1,50 @@
+// learn/examples/ch02_06_mini_calc.glk
+// 第 2 章综合小练习：命令行迷你计算
+// 运行:
+//   .\gltk.exe run learn\examples\ch02_06_mini_calc.glk -- 3 + 5
+//   .\gltk.exe run learn\examples\ch02_06_mini_calc.glk -- 10 * 2
+//   .\gltk.exe run learn\examples\ch02_06_mini_calc.glk -- 7 / 2
+
+import out
+
+fn main(args) {
+  // args：gltk run file.glk -- 后面的参数
+  if len(args) < 3 {
+    out.println("usage: gltk run ch02_06_mini_calc.glk -- <int> <+|-|*|/|%> <int>")
+    return 1
+  }
+
+  let left = int(args[0])
+  let op = args[1]
+  let right = int(args[2])
+  let result = 0
+  let ok = true
+
+  if op == "+" {
+    result = left + right
+  } else if op == "-" {
+    result = left - right
+  } else if op == "*" {
+    result = left * right
+  } else if op == "/" {
+    if right == 0 {
+      out.println("error: division by zero")
+      return 2
+    }
+    result = left / right
+  } else if op == "%" {
+    result = left % right
+  } else {
+    ok = false
+  }
+
+  if !ok {
+    out.println("unknown op: " + op)
+    return 3
+  }
+
+  // 打印：3 + 5 = 8
+  out.println(("" + left) + " " + op + " " + ("" + right) + " = " + ("" + result))
+  out.println("typeof(result) = " + typeof(result))
+  return 0
+}

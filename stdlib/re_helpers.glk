@@ -1,0 +1,90 @@
+// re_helpers.glk — regex-based extraction helpers for reverse engineering
+// Wraps native `re` module with pre-built patterns.
+//
+// import "stdlib/re_helpers.glk" as rh
+
+import re
+
+// extract_emails returns all email addresses found in text.
+fn extract_emails(text) {
+    return re.find_all("[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}", text)
+}
+
+// extract_urls returns all http/https URLs found in text.
+fn extract_urls(text) {
+    return re.find_all("https?://[^\\s\"'<>\\]\\)\\}]+", text)
+}
+
+// extract_ipv4 returns all IPv4 addresses found in text.
+fn extract_ipv4(text) {
+    return re.find_all("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b", text)
+}
+
+// extract_domains returns hostnames/domains (bare, without protocol).
+fn extract_domains(text) {
+    return re.find_all("\\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}\\b", text)
+}
+
+// extract_uuids returns UUID-like hex strings (8-4-4-4-12).
+fn extract_uuids(text) {
+    return re.find_all("[0-9a-fA-F]{8}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{12}", text)
+}
+
+// extract_hex_strings returns hex byte sequences (min length default 8).
+fn extract_hex_strings(text) {
+    return re.find_all("\\b[0-9a-fA-F]{8,}\\b", text)
+}
+
+// extract_pe_rva finds common PE RVA patterns like 0x00401000.
+fn extract_pe_rva(text) {
+    return re.find_all("0x[0-9a-fA-F]{4,8}", text)
+}
+
+// extract_import_dlls finds Windows DLL names in text.
+fn extract_import_dlls(text) {
+    return re.find_all("[A-Za-z0-9_\\-]+\\.dll", text)
+}
+
+// extract_paths finds Windows file paths in text.
+fn extract_paths(text) {
+    return re.find_all("[A-Z]:\\\\[^\\s\"'<>]+", text)
+}
+
+// extract_cloudfront finds CloudFront distribution URLs.
+fn extract_cloudfront(text) {
+    return re.find_all("https?://[a-z0-9]+\\.cloudfront\\.net", text)
+}
+
+// extract_pe_markers finds common PE/installer marker strings.
+fn extract_pe_markers(text) {
+    return re.find_all("NullsoftInst|Inno Setup|AutoHotkey|app\\.asar|Electron|ScriptGuard|UPX|\\.NET|PyInstaller", text)
+}
+
+// first_match returns the first regex match or empty string.
+fn first_match(pattern, text) {
+    let f = re.find(pattern, text)
+    if f.ok {
+        return f.match
+    }
+    return ""
+}
+
+// has_pattern returns true if pattern matches anywhere in text.
+fn has_pattern(pattern, text) {
+    return re.match(pattern, text)
+}
+
+// count_pattern returns the number of non-overlapping matches.
+fn count_pattern(pattern, text) {
+    return len(re.find_all(pattern, text))
+}
+
+// replace_all is a convenience wrapper around re.replace with n=-1.
+fn replace_all(pattern, text, repl) {
+    return re.replace(pattern, text, repl, -1)
+}
+
+// groups extracts capture groups from first match; returns array or empty array.
+fn groups(pattern, text) {
+    return re.groups(pattern, text)
+}

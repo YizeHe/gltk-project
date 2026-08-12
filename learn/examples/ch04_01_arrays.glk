@@ -1,0 +1,51 @@
+// ch04_01_arrays.glk — 数组基础
+// .\gltk.exe run learn\examples\ch04_01_arrays.glk
+
+import out
+
+fn main(args) {
+  // 字面量
+  let empty = []
+  let xs = [10, 20, 30, 40]
+  out.println("len empty=", len(empty), " len xs=", len(xs))
+  out.println("typeof=", typeof(xs))
+
+  // 下标从 0 开始
+  out.println("first=", xs[0], " last=", xs[len(xs) - 1])
+
+  // 写入
+  xs[1] = 99
+  out.println("xs[1]=", xs[1])
+
+  // 引用语义
+  let ys = xs
+  ys[0] = 1
+  out.println("xs[0] after alias write=", xs[0])
+
+  // 用 range 填固定长度表
+  let tab = [0, 0, 0, 0, 0]
+  for i in range(0, 5) {
+    tab[i] = i * i
+  }
+  out.println("squares:")
+  for i in range(0, 5) {
+    out.println(" ", i, "->", tab[i])
+  }
+
+  // 遍历元素
+  let sum = 0
+  for v in xs {
+    sum = sum + v
+  }
+  out.println("sum xs=", sum)
+
+  // 异质数组（动态类型允许，生产慎用）
+  let mix = [1, "two", true, null]
+  out.println("mix types:", typeof(mix[0]), typeof(mix[1]), typeof(mix[2]), typeof(mix[3]))
+
+  // 嵌套数组（矩阵）
+  let mat = [[1, 2], [3, 4]]
+  out.println("mat[1][0]=", mat[1][0])
+
+  return 0
+}

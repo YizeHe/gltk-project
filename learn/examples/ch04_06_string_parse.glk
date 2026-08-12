@@ -1,0 +1,72 @@
+// ch04_06_string_parse.glk — 拆分路径/KV、简单解析
+// .\gltk.exe run learn\examples\ch04_06_string_parse.glk
+
+import out, str
+
+fn basename(path) {
+  // 支持 / 与 \
+  let p = str.replace(path, "\\", "/")
+  let parts = str.split(p, "/")
+  if len(parts) == 0 {
+    return path
+  }
+  return parts[len(parts) - 1]
+}
+
+fn parse_kv(line) {
+  // key=value 只切第一处 =
+  let idx = str.index_of(line, "=")
+  if idx < 0 {
+    return {ok: false, error: "no ="}
+  }
+  let key = str.slice(line, 0, idx)
+  let val = str.slice(line, idx + 1, len(line))
+  return {ok: true, key: str.trim(key), value: str.trim(val)}
+}
+
+fn parse_kv_lines(text) {
+  let lines = str.split(text, "\n")
+  let m = {}
+  for line in lines {
+    let t = str.trim(line)
+    if t == "" {
+      continue
+    }
+    if str.starts_with(t, "#") {
+      continue
+    }
+    let kv = parse_kv(t)
+    if kv.ok {
+      m[kv.key] = kv.value
+    }
+  }
+  return m
+}
+
+fn main(args) {
+  out.println(basename("D:/work/a/b/sample.exe"))
+  out.println(basename("C:\\temp\\x.bin"))
+
+  let kv = parse_kv("port = 8080")
+  out.println("kv", kv.key, "=", kv.value)
+
+  let conf = parse_kv_lines("""
+# demo config
+host = 127.0.0.1
+port = 10808
+mode = socks
+""")
+  out.println("-- config map --")
+  for k in conf {
+    out.println(" ", k, "=>", conf[k])
+  }
+
+  // 逗号分隔列表
+  let mods = str.split("pe, fs, out", ",")
+  out.println("-- modules --")
+  for i in range(0, len(mods)) {
+    out.println(str.trim(mods[i]))
+  }
+
+  return 0
+}

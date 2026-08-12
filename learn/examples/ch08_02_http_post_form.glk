@@ -1,0 +1,42 @@
+// ch08_02_http_post_form.glk — POST JSON / form / download
+// .\gltk.exe run learn\examples\ch08_02_http_post_form.glk
+
+import out, http, json, fs
+
+fn main(args) {
+  // POST JSON
+  out.println("--- post json ---")
+  let body = json.stringify({tool: "gltk", chapter: 8, n: 42})
+  let r = http.post("https://httpbin.org/post", body, {
+    timeout: 25,
+    headers: {"Content-Type": "application/json"},
+    user_agent: "gltk-learn-ch08"
+  })
+  out.println("status=", r.status, " ok=", r.ok, " len=", len(r.body))
+
+  // form
+  out.println("--- form ---")
+  let form = http.encode_form({a: "1", b: "two words", c: "中文"})
+  out.println("encoded=", form)
+  let fr = http.post("https://httpbin.org/post", form, {
+    timeout: 25,
+    headers: {"Content-Type": "application/x-www-form-urlencoded"}
+  })
+  out.println("form status=", fr.status)
+
+  // download small
+  out.println("--- download ---")
+  fs.mkdir_all("learn/examples/_tmp_ch08")
+  let path = "learn/examples/_tmp_ch08/httpbin_bytes.bin"
+  let dl = http.download("https://httpbin.org/bytes/32", path, {timeout: 25})
+  out.println("download ok=", dl.ok, " bytes=", dl.bytes, " path=", dl.path)
+  if dl.ok && fs.exists(path) {
+    out.println("file_size=", fs.file_size(path))
+  }
+
+  // HEAD
+  let h = http.head("https://httpbin.org/get", {timeout: 15})
+  out.println("HEAD status=", h.status, " ok=", h.ok)
+
+  return 0
+}

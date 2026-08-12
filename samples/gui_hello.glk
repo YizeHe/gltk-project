@@ -1,0 +1,37 @@
+// gui_hello.glk — minimal GLTK GUI smoke demo
+//   gltk run samples/gui_hello.glk
+//
+// Shows a window with label + buttons. Click Quit to exit.
+
+import gui, out
+
+fn on_ok() {
+  gui.msgbox("Hello from GrokLang GUI!", "GLTK")
+}
+
+fn on_quit() {
+  gui.quit()
+}
+
+fn main(args) {
+  if !gui.available() {
+    out.println("gui not available")
+    return 1
+  }
+  out.println("gui.version =", gui.version())
+  gui.init()
+
+  let w = gui.window("GLTK Hello", 420, 200)
+  gui.label(w, "Hello from GrokLang (CUI backend)", 20, 20, 380, 28)
+
+  let b1 = gui.button(w, "Say Hi", 20, 70, 100, 32)
+  let b2 = gui.button(w, "Quit", 140, 70, 100, 32)
+  gui.on_click(b1, on_ok)
+  gui.on_click(b2, on_quit)
+
+  gui.show(w)
+  out.println("window shown — click Quit or close window")
+  gui.run()
+  out.println("done")
+  return 0
+}

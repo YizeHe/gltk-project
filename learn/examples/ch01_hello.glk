@@ -1,0 +1,13 @@
+// learn/examples/ch01_hello.glk
+// 第 1 章：Hello World —— 你的第一个 GrokLang 程序
+//
+// 运行（在 gltk 仓库根目录）:
+//   .\gltk.exe run learn\examples\ch01_hello.glk
+
+import out
+
+fn main(args) {
+  out.println("Hello, World!")
+  out.println("Hello from GrokLang!")
+  return 0
+}

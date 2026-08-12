@@ -1,0 +1,5 @@
+import gui, out
+fn main(args) {
+  out.println("gui.available=", gui.available())
+  return 0
+}

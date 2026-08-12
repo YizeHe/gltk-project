@@ -1,0 +1,63 @@
+// ch06_06_scan_magic.glk — 读真实文件头并判断 MZ
+// .\gltk.exe run learn\examples\ch06_06_scan_magic.glk -- gltk.exe
+// 默认扫描自身仓库内 gltk.exe
+
+import out, fs, bin, str
+
+fn main(args) {
+  let path = "gltk.exe"
+  if len(args) > 0 {
+    path = args[0]
+  }
+  if !fs.exists(path) {
+    out.println("file not found:", path)
+    out.println("usage: gltk run ch06_06_scan_magic.glk -- <path>")
+    return 1
+  }
+
+  let size = fs.file_size(path)
+  out.println("path=", path)
+  out.println("size=", size)
+
+  let n = 64
+  if size < n {
+    n = size
+  }
+  if n < 2 {
+    out.println("too small")
+    return 2
+  }
+
+  let hdr = fs.read_range(path, 0, n)
+  // 期望 bytes
+  let b0 = bin.u8(hdr, 0)
+  let b1 = bin.u8(hdr, 1)
+  out.println("first two bytes:", b0, b1)
+
+  let u = bin.u16le(hdr, 0)
+  // MZ = 0x5A4D
+  if u == 0x5A4D {
+    out.println("magic: MZ (PE/DOS stub likely)")
+  } else if b0 == 0x7F && b1 == 0x45 {
+    out.println("magic: possible ELF")
+  } else {
+    out.println("magic: unknown u16le=", u)
+  }
+
+  out.println("crc32(header)=", bin.crc32(hdr))
+  out.println("sum8(header)=", bin.checksum_sum8(hdr))
+
+  // 在头 64 字节里找 0x00 数量
+  let zeros = 0
+  let i = 0
+  let L = bin.len(hdr)
+  while i < L {
+    if bin.u8(hdr, i) == 0 {
+      zeros = zeros + 1
+    }
+    i = i + 1
+  }
+  out.println("zero bytes in header window=", zeros, "/", L)
+
+  return 0
+}

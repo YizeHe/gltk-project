@@ -1,0 +1,67 @@
+// net_demo.glk — exercise general networking (http / net / httpx)
+// Usage: gltk run samples/net_demo.glk
+
+import http, net, out, json
+import "stdlib/httpx.glk" as httpx
+import "stdlib/netutil.glk" as netu
+
+fn main(args) {
+  out.println("=== GLTK network library demo ===")
+
+  // 1) native http.get with opts
+  out.println("--- http.get ---")
+  let r = http.get("https://httpbin.org/get", {
+    timeout: 20,
+    user_agent: "GLTK-net-demo/0.5",
+    headers: {"X-Demo": "1"}
+  })
+  out.println("status", r.status, "ok", r.ok, "body_len", len(r.body))
+  if r.ok {
+    let j = json.parse(r.body)
+    out.println("url field present", typeof(j) == "map")
+  }
+
+  // 2) httpx session + get_json
+  out.println("--- httpx session ---")
+  let s = httpx.session_new("https://httpbin.org", {"Accept": "application/json"})
+  let gj = httpx.get_json(s, "/get")
+  out.println("get_json ok", gj.ok, "status", gj.status)
+
+  let pj = httpx.post_json(s, "/post", {hello: "gltk", n: 42})
+  out.println("post_json ok", pj.ok, "status", pj.status)
+
+  // 3) form
+  out.println("--- form ---")
+  let form = http.encode_form({a: "1", b: "two words"})
+  out.println("encode_form", form)
+  let fr = http.post("https://httpbin.org/post", form, {
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    timeout: 20
+  })
+  out.println("form post", fr.status)
+
+  // 4) DNS
+  out.println("--- net.resolve ---")
+  let dns = net.resolve("example.com")
+  out.println("ok", dns.ok)
+  if dns.ok {
+    let i = 0
+    while i < len(dns.addrs) && i < 5 {
+      out.println(" ", dns.addrs[i])
+      i = i + 1
+    }
+  }
+
+  // 5) raw TCP HTTP (optional — may fail offline)
+  out.println("--- netutil.http_get_raw example.com ---")
+  let raw = netu.http_get_raw("example.com", 80, "/")
+  out.println("raw ok", raw.ok, "body_len", len(raw.body))
+
+  // 6) download small
+  out.println("--- download ---")
+  let dl = http.download("https://httpbin.org/bytes/64", "work\\net_dl.bin", {timeout: 20})
+  out.println("download ok", dl.ok, "bytes", dl.bytes, "path", dl.path)
+
+  out.println("=== done ===")
+  return 0
+}

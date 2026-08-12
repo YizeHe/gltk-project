@@ -1,0 +1,65 @@
+// netutil.glk — TCP helpers on native net (pure GrokLang)
+// import "stdlib/netutil.glk" as netu
+
+import net, str
+
+fn dial_tcp(hostport, timeout_sec) {
+  let t = 30
+  if timeout_sec > 0 {
+    t = timeout_sec
+  }
+  return net.dial("tcp", hostport, t)
+}
+
+fn resolve_host(host) {
+  return net.resolve(host)
+}
+
+// read_all: read until EOF or max_bytes
+fn read_all(conn, max_bytes) {
+  let cap = 1048576
+  if max_bytes > 0 {
+    cap = max_bytes
+  }
+  let out = ""
+  let total = 0
+  while total < cap {
+    let chunk = 4096
+    if cap - total < chunk {
+      chunk = cap - total
+    }
+    let r = conn.read(chunk)
+    if !r.ok {
+      return {ok: false, error: r.error, data: out, n: total}
+    }
+    if r.eof || r.n == 0 {
+      return {ok: true, error: "", data: out, n: total}
+    }
+    // append as string from utf8-ish bytes
+    out = out + str.from_utf8(r.data)
+    total = total + r.n
+  }
+  return {ok: true, error: "", data: out, n: total}
+}
+
+// http_get_raw: minimal HTTP/1.0 over TCP (no TLS) for debugging
+fn http_get_raw(host, port, path) {
+  let addr = host + ":" + ("" + port)
+  let c = dial_tcp(addr, 15)
+  if !c.ok {
+    return {ok: false, error: c.error, body: ""}
+  }
+  let p = path
+  if p == "" {
+    p = "/"
+  }
+  let req = "GET " + p + " HTTP/1.0\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+  let w = c.write(req)
+  if !w.ok {
+    c.close()
+    return {ok: false, error: w.error, body: ""}
+  }
+  let r = read_all(c, 1048576)
+  c.close()
+  return {ok: r.ok, error: r.error, body: r.data}
+}

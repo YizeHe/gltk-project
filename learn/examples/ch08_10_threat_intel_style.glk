@@ -1,0 +1,44 @@
+// ch08_10_threat_intel_style.glk — 组合：HTTP 拉文本 + regex IOC（公共 httpbin）
+// .\gltk.exe run learn\examples\ch08_10_threat_intel_style.glk
+
+import out, http, re, json
+
+fn main(args) {
+  // 用 httpbin 回显一段我们 post 的「情报文本」
+  let intel = "alert alice@corp.test c2=http://bad.example/gate ip=198.51.100.4"
+  let body = json.stringify({text: intel})
+  let r = http.post("https://httpbin.org/post", body, {
+    timeout: 25,
+    headers: {"Content-Type": "application/json"}
+  })
+  out.println("post status=", r.status)
+  if !r.ok {
+    out.println("network fail", r.error)
+    return 1
+  }
+
+  // 从回包中取出我们的 text（简化：直接对原始 intel 做 IOC）
+  let text = intel
+  out.println("scan:", text)
+
+  let emails = re.find_all("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", text)
+  let urls = re.find_all("https?://[^\\s]+", text)
+  let ips = re.find_all("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b", text)
+
+  out.println("emails:")
+  for e in emails { out.println(" ", e) }
+  out.println("urls:")
+  for u in urls { out.println(" ", u) }
+  out.println("ips:")
+  for ip in ips { out.println(" ", ip) }
+
+  let report = {
+    ok: true,
+    email_count: len(emails),
+    url_count: len(urls),
+    ip_count: len(ips),
+    source: "ch08_10"
+  }
+  out.println(json.stringify(report))
+  return 0
+}

@@ -1,0 +1,47 @@
+// ch07_05_pattern_bin.glk — bin.find_bytes 扫特征码
+// .\gltk.exe run learn\examples\ch07_05_pattern_bin.glk
+
+import out, fs, bin
+
+fn find_all(data, needle) {
+  let hits = []
+  let count = 0
+  let start = 0
+  let L = bin.len(data)
+  let nlen = bin.len(needle)
+  while start + nlen <= L {
+    let sub = bin.slice(data, start, L)
+    let rel = bin.find_bytes(sub, needle)
+    if rel < 0 {
+      break
+    }
+    let abs = start + rel
+    out.println("hit @", abs)
+    count = count + 1
+    start = abs + 1
+    if count > 50 { break }
+  }
+  return count
+}
+
+fn main(args) {
+  let path = "learn/testdata/re/05_pattern_deadbeef.bin"
+  if len(args) > 0 { path = args[0] }
+  let data = fs.read_bytes(path)
+
+  // DE AD BE EF
+  let needle = bin.slice(bin.from_u32le([0xEFBEADDE]), 0, 4)
+  // from_u32le of 0xEFBEADDE on LE machine stores DE AD BE EF — check:
+  out.println("needle bytes", bin.u8(needle, 0), bin.u8(needle, 1), bin.u8(needle, 2), bin.u8(needle, 3))
+
+  let n = find_all(data, needle)
+  out.println("total hits=", n)
+
+  // 也在 gltk.exe 头里找 MZ
+  if fs.exists("gltk.exe") {
+    let pe = fs.read_range("gltk.exe", 0, 1024)
+    let mz = bin.slice(pe, 0, 2)
+    out.println("MZ find in gltk.exe head=", bin.find_bytes(pe, mz))
+  }
+  return 0
+}

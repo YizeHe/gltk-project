@@ -1,0 +1,131 @@
+import tensor
+
+// Convenience wrappers around the tensor native module.
+
+fn randn(shape_arr) {
+  return tensor.randn(shape_arr)
+}
+
+fn zeros(shape_arr) {
+  return tensor.zeros(shape_arr)
+}
+
+fn ones(shape_arr) {
+  return tensor.ones(shape_arr)
+}
+
+fn fill(shape_arr, val) {
+  return tensor.fill(shape_arr, val)
+}
+
+fn rand(shape_arr) {
+  return tensor.rand(shape_arr)
+}
+
+fn matmul(a, b) {
+  return tensor.matmul(a, b)
+}
+
+fn transpose(a) {
+  return tensor.transpose(a)
+}
+
+fn reshape(a, shape_arr) {
+  return tensor.reshape(a, shape_arr)
+}
+
+fn softmax(a) {
+  return tensor.softmax(a)
+}
+
+fn relu(a) {
+  return tensor.relu(a)
+}
+
+fn gelu(a) {
+  return tensor.gelu(a)
+}
+
+fn add(a, b) {
+  return tensor.add(a, b)
+}
+
+fn mul(a, b) {
+  return tensor.mul(a, b)
+}
+
+fn div(a, b) {
+  return tensor.div(a, b)
+}
+
+fn sub(a, b) {
+  return tensor.sub(a, b)
+}
+
+fn sum(a) {
+  return tensor.sum(a)
+}
+
+fn mean(a) {
+  return tensor.mean(a)
+}
+
+fn sqrt(a) {
+  return tensor.sqrt(a)
+}
+
+fn pow(a, exp) {
+  return tensor.pow(a, exp)
+}
+
+fn exp(a) {
+  return tensor.exp(a)
+}
+
+fn slice_2d(a, rStart, rEnd, cStart, cEnd) {
+  return tensor.slice_2d(a, rStart, rEnd, cStart, cEnd)
+}
+
+fn cross_entropy(logits, targets_arr) {
+  return tensor.cross_entropy(logits, targets_arr)
+}
+
+fn to_value(a) {
+  return tensor.to_value(a)
+}
+
+fn print_stats(a, name) {
+  return tensor.print_stats(a, name)
+}
+
+fn shape(a) {
+  return tensor.shape(a)
+}
+
+fn enable_grad() {
+  return tensor.enable_grad()
+}
+
+fn zero_grad(params_arr) {
+  return tensor.zero_grad(params_arr)
+}
+
+fn backward(loss) {
+  return tensor.backward(loss)
+}
+
+fn get_grad(param) {
+  return tensor.get_grad(param)
+}
+
+fn step_adam(params_arr, lr, beta1, beta2, eps, t) {
+  return tensor.step_adam(params_arr, lr, beta1, beta2, eps, t)
+}
+
+fn embed_lookup(weight, indices) {
+  return tensor.embed_lookup(weight, indices)
+}
+
+fn cat(tensors_arr) {
+  return tensor.cat(tensors_arr)
+}

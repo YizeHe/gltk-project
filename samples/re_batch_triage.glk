@@ -1,0 +1,46 @@
+// re_batch_triage.glk — batch static triage using stdlib/re_triage
+// Usage: gltk run samples/re_batch_triage.glk -- <dir|file> [report.md]
+import "stdlib/re_triage.glk" as rt
+import fs, out, str
+
+fn main(args) {
+  if len(args) < 1 {
+    out.println("usage: gltk run re_batch_triage.glk -- <path> [report.md]")
+    return 1
+  }
+  let target = args[0]
+  let report_path = "RE_TRIAGE_REPORT.md"
+  if len(args) >= 2 {
+    report_path = args[1]
+  }
+  let body = ""
+  body = body + "Tool: GLTK 1.0 re_triage\n\n"
+  if !fs.exists(target) {
+    out.println("missing", target)
+    return 1
+  }
+  // file vs dir: walk
+  let walk = fs.walk(target)
+  if typeof(walk) == "array" && len(walk) > 0 {
+    let i = 0
+    let n = len(walk)
+    if n > 200 { n = 200 }
+    while i < n {
+      let p = walk[i]
+      let low = str.lower(p)
+      // skip huge media-ish by extension
+      if str.ends_with(low, ".png") || str.ends_with(low, ".jpg") || str.ends_with(low, ".mp3") || str.ends_with(low, ".wav") {
+        i = i + 1
+        continue
+      }
+      out.println("triage", p)
+      body = body + rt.triage_one(p)
+      i = i + 1
+    }
+  } else {
+    body = body + rt.triage_one(target)
+  }
+  rt.write_report(report_path, body)
+  out.println("WROTE", report_path)
+  return 0
+}

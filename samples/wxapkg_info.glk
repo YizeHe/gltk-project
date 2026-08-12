@@ -1,0 +1,30 @@
+// List files inside a .wxapkg package (decrypt if needed — pass wxid as args[1]).
+import out
+import wxapkg
+import fs
+
+fn main(args) {
+  if len(args) < 1 {
+    out.println("usage: gltk run samples/wxapkg_info.glk -- <file.wxapkg> [wxid]")
+    return 1
+  }
+  let path = args[0]
+  if !fs.exists(path) {
+    out.println("file not found: " + path)
+    return 1
+  }
+  let data = fs.read_bytes(path)
+  if wxapkg.is_encrypted(data) {
+    if len(args) < 2 {
+      out.println("package is encrypted; pass wxid as second arg")
+      return 1
+    }
+    data = wxapkg.decrypt(data, args[1])
+  }
+  let files = wxapkg.list_files(data)
+  out.println("files: " + str(len(files)))
+  for f in files {
+    out.println(f.name + "  offset=" + str(f.offset) + " size=" + str(f.size))
+  }
+  return 0
+}

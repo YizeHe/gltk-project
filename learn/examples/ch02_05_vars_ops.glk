@@ -1,0 +1,66 @@
+// learn/examples/ch02_05_vars_ops.glk
+// 第 2 章：变量、赋值、运算符优先级、字段与下标
+// 运行: .\gltk.exe run learn\examples\ch02_05_vars_ops.glk
+
+import out
+
+fn main(args) {
+  // ---- let 绑定 ----
+  let x = 10
+  out.println("x =", x)
+
+  // 重新赋值（同一名字）
+  x = x + 5
+  out.println("x after =", x)
+
+  // ---- 数组：字面量、下标、len ----
+  let arr = [10, 20, 30]
+  out.println("arr[0] =", arr[0])
+  out.println("arr[2] =", arr[2])
+  out.println("len(arr) =", len(arr))
+  arr[1] = 99
+  out.println("arr after set =", arr[0], arr[1], arr[2])
+
+  // 引用语义：b 与 arr 指向同一数组
+  let b = arr
+  b[0] = 1
+  out.println("arr[0] after alias write =", arr[0])
+
+  // ---- 映射：字面量、点字段、下标 ----
+  // 注意：{ key: value } 里 key 可以是标识符 a 或字符串 "a"
+  let m = {name: "demo", "port": 8080, count: 0}
+  out.println("m.name =", m.name)
+  out.println("m[\"port\"] =", m["port"])
+  m.count = m.count + 1
+  out.println("m.count =", m.count)
+
+  // ★ 坑：顶层全局塞进 map 字面量可能变 null；局部有时可用
+  // 规范写法永远是：纯字面量，或先 {} 再赋值
+  let host = "example.com"
+  let localMap = {"server": host}  // 局部：当前实现往往 OK
+  out.println("localMap.server =", localMap.server)
+
+  let good1 = {"server": "example.com"}
+  out.println("good1.server =", good1.server)
+
+  let good2 = {}
+  good2.server = host
+  out.println("good2.server =", good2.server)
+
+  // ---- 运算符优先级直觉（用括号最安全）----
+  out.println("1+2*3 =", 1 + 2 * 3)         // 7
+  out.println("(1+2)*3 =", (1 + 2) * 3)     // 9
+  out.println("2<<2+1 =", 2 << 2 + 1)       // 依赖优先级，建议写括号
+  out.println("2<<(2+1) =", 2 << (2 + 1))
+  out.println("true || false && false =", true || false && false)
+
+  // 三元优先级低于 ||
+  let t = false || true ? "yes" : "no"
+  out.println("ternary with or =", t)
+
+  // ---- range 内建：生成整数数组 ----
+  let r = range(0, 3) // 0,1,2
+  out.println("range(0,3) len =", len(r), " first =", r[0], " last =", r[2])
+
+  return 0
+}

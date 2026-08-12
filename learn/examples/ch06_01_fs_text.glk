@@ -1,0 +1,24 @@
+// ch06_01_fs_text.glk — 文本读写
+// .\gltk.exe run learn\examples\ch06_01_fs_text.glk
+
+import out, fs
+
+fn main(args) {
+  let dir = "learn/examples/_tmp_ch06"
+  let path = dir + "/hello.txt"
+
+  fs.mkdir_all(dir)
+  fs.write_text(path, "line1\nline2\n你好 GrokLang\n")
+
+  out.println("exists?", fs.exists(path))
+  let text = fs.read_text(path)
+  out.println("--- content ---")
+  out.println(text)
+  out.println("size=", fs.file_size(path))
+
+  // 追加风格：读改写
+  fs.write_text(path, text + "line3\n")
+  out.println("after append lines, size=", fs.file_size(path))
+
+  return 0
+}

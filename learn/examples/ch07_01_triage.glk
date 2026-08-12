@@ -1,0 +1,50 @@
+// ch07_01_triage.glk — 样本 triage：size / MZ / 熵 / 哈希
+// .\gltk.exe run learn\examples\ch07_01_triage.glk -- gltk.exe
+// .\gltk.exe run learn\examples\ch07_01_triage.glk -- learn\testdata\re\04_mz_pe_sig_stub.bin
+
+import out, fs, bin, crypto
+
+fn triage(path) {
+  let r = {path: path, ok: false, error: "", size: 0, mz: false, md5: "", sha256: "", entropy: 0}
+  if !fs.exists(path) {
+    r.error = "missing"
+    return r
+  }
+  r.size = fs.file_size(path)
+  let n = 4096
+  if r.size < n { n = r.size }
+  if n < 2 {
+    r.error = "too small"
+    return r
+  }
+  let head = fs.read_range(path, 0, n)
+  r.mz = bin.u16le(head, 0) == 0x5A4D
+  // full file hash for small; head-only note for large
+  if r.size <= 2 * 1024 * 1024 {
+    let all = fs.read_bytes(path)
+    r.md5 = crypto.md5_hex(all)
+    r.sha256 = crypto.sha256_hex(all)
+  } else {
+    r.md5 = crypto.md5_hex(head) + " (head-only)"
+    r.sha256 = crypto.sha256_hex(head) + " (head-only)"
+  }
+  r.ok = true
+  return r
+}
+
+fn main(args) {
+  let path = "gltk.exe"
+  if len(args) > 0 { path = args[0] }
+
+  let t = triage(path)
+  out.println("path=", t.path)
+  if !t.ok {
+    out.println("error=", t.error)
+    return 1
+  }
+  out.println("size=", t.size)
+  out.println("mz=", t.mz)
+  out.println("md5=", t.md5)
+  out.println("sha256=", t.sha256)
+  return 0
+}

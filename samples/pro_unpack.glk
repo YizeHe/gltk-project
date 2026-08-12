@@ -1,0 +1,188 @@
+// pro_unpack.glk — full static reverse of GTAOL Ultra Macro Pro (.NET + AHPK2)
+// No Python. No external decompiler required for host keys / AES unpack.
+//
+// Usage (from gltk/):
+//   .\gltk.exe run samples/pro_unpack.glk
+//   .\gltk.exe run samples/pro_unpack.glk -- "..\test\GTAOL Ultra Macro Pro.exe" work\pro_gltk
+//
+// Pipeline:
+//   1) pe.summary        — PE triage / overlay size
+//   2) dotnet.summary    — CLR + interesting #US (keys, AHPK2, AES/HMAC)
+//   3) ahpk2.detect      — trailer magic + payload size
+//   4) ahpk2.unpack      — HMAC + AES-256-CBC PKCS7 + ZIP extract (profile pro)
+
+import pe, fs, out, str, ahpk2, dotnet, crypto
+
+fn push(s, line) {
+  return s + line + "\n"
+}
+
+fn main(args) {
+  let sample = "..\\test\\GTAOL Ultra Macro Pro.exe"
+  let outDir = "work\\pro_gltk"
+  if len(args) >= 1 {
+    sample = args[0]
+  }
+  if len(args) >= 2 {
+    outDir = args[1]
+  }
+
+  out.println("=== GLTK Pro reverse (dotnet + ahpk2 + crypto) ===")
+  out.println("sample: " + sample)
+  out.println("out:    " + outDir)
+
+  if !fs.exists(sample) {
+    out.println("ERROR: sample not found: " + sample)
+    return 1
+  }
+
+  let report = ""
+  report = push(report, "# GTAOL Ultra Macro Pro — GLTK native reverse")
+  report = push(report, "")
+  report = push(report, "Sample: `" + sample + "`")
+  report = push(report, "")
+
+  // --- PE triage ---
+  out.println("--- pe.summary ---")
+  let psi = pe.summary(sample)
+  report = push(report, "## PE")
+  if typeof(psi) == "map" {
+    out.println("size=", psi.size, " overlay=", psi.overlay_size, " image_end=", psi.image_end)
+    report = push(report, "- size: " + psi.size)
+    report = push(report, "- image_end: " + psi.image_end)
+    report = push(report, "- overlay_size: " + psi.overlay_size)
+    if typeof(psi.markers) == "array" {
+      let mi = 0
+      let ms = ""
+      while mi < len(psi.markers) {
+        if mi > 0 { ms = ms + ", " }
+        ms = ms + psi.markers[mi]
+        mi = mi + 1
+      }
+      report = push(report, "- markers: " + ms)
+      out.println("markers: " + ms)
+    }
+  }
+  report = push(report, "")
+
+  // --- .NET / IL ---
+  out.println("--- dotnet.summary ---")
+  let ds = dotnet.summary(sample)
+  report = push(report, "## .NET host")
+  if typeof(ds) == "map" && ds.is_clr {
+    out.println("CLR=true ilonly=", ds.ilonly, " types=", ds.type_count, " methods=", ds.method_count)
+    report = push(report, "- is_clr: true")
+    report = push(report, "- ilonly: " + ds.ilonly)
+    report = push(report, "- type_count: " + ds.type_count)
+    report = push(report, "- method_count: " + ds.method_count)
+    if typeof(ds.interesting_strings) == "array" {
+      report = push(report, "- interesting #US strings:")
+      let si = 0
+      while si < len(ds.interesting_strings) {
+        let t = ds.interesting_strings[si]
+        out.println("  US: " + t)
+        report = push(report, "  - `" + t + "`")
+        si = si + 1
+      }
+    }
+  } else {
+    out.println("not CLR or summary failed")
+    report = push(report, "- is_clr: false / failed")
+  }
+  report = push(report, "")
+
+  // dump IL for crypto-critical methods if present
+  out.println("--- dotnet.il (P::Main / Key / Dec / Mac) ---")
+  report = push(report, "## IL (selected)")
+  let methods = ["Main", "Key", "Dec", "Mac", "Eq"]
+  let mi2 = 0
+  while mi2 < len(methods) {
+    let mname = methods[mi2]
+    let ilr = dotnet.il(sample, "P", mname)
+    if typeof(ilr) == "map" && ilr.ok {
+      out.println("IL P::" + mname + " rva=" + ilr.rva)
+      report = push(report, "### P::" + mname)
+      report = push(report, "```")
+      report = push(report, ilr.il)
+      report = push(report, "```")
+    } else {
+      // try without type filter short name search
+      let ilr2 = dotnet.il(sample, "", mname)
+      if typeof(ilr2) == "map" && ilr2.ok {
+        out.println("IL ::" + mname + " type=" + ilr2.type)
+        report = push(report, "### " + ilr2.type + "::" + mname)
+        report = push(report, "```")
+        report = push(report, ilr2.il)
+        report = push(report, "```")
+      } else {
+        out.println("skip IL " + mname)
+      }
+    }
+    mi2 = mi2 + 1
+  }
+  report = push(report, "")
+
+  // --- AHPK2 detect ---
+  out.println("--- ahpk2.detect ---")
+  let det = ahpk2.detect(sample)
+  report = push(report, "## AHPK2 trailer")
+  if typeof(det) == "map" && det.ok {
+    out.println("magic=", det.magic, " payload=", det.payload_size, " off=", det.payload_offset)
+    report = push(report, "- magic: " + det.magic)
+    report = push(report, "- payload_size: " + det.payload_size)
+    report = push(report, "- payload_offset: " + det.payload_offset)
+    report = push(report, "- file_size: " + det.file_size)
+  } else {
+    out.println("AHPK2 not detected: " + det.error)
+    report = push(report, "- detect failed: " + det.error)
+    fs.mkdir_all(outDir)
+    fs.write_text(outDir + "\\REPORT_GLTK.md", report)
+    return 2
+  }
+  report = push(report, "")
+
+  // crypto demo: show Pro key material via crypto.b64_decode (same as host)
+  out.println("--- crypto (Pro key material check) ---")
+  let key = crypto.b64_decode("QD3D2gPl8Ywm/SwZDMhV8nPzGwFFmRk4WWQdJjKZd44=")
+  let iv = crypto.b64_decode("IXAwpGDqS//tpxoMHz+gNw==")
+  out.println("key_len=", len(key), " iv_len=", len(iv))
+  report = push(report, "## Crypto material (profile pro)")
+  report = push(report, "- AES/HMAC key: 32 bytes (b64 QD3D…)")
+  report = push(report, "- AES IV: 16 bytes (b64 IXAwp…)")
+  report = push(report, "- algo: HMAC-SHA256 then AES-256-CBC PKCS7 → ZIP")
+  report = push(report, "")
+
+  // --- unpack ---
+  out.println("--- ahpk2.unpack (profile=pro) ---")
+  fs.mkdir_all(outDir)
+  let ur = ahpk2.unpack(sample, outDir)
+  report = push(report, "## Unpack")
+  if typeof(ur) == "map" && ur.ok {
+    out.println("OK mac_ok=", ur.mac_ok, " plain=", ur.plain_size, " entries=", ur.entries)
+    out.println("zip=", ur.zip_path)
+    out.println("dir=", ur.out_dir)
+    report = push(report, "- ok: true")
+    report = push(report, "- mac_ok: " + ur.mac_ok)
+    report = push(report, "- plain_size: " + ur.plain_size)
+    report = push(report, "- entries: " + ur.entries)
+    report = push(report, "- zip_path: `" + ur.zip_path + "`")
+    report = push(report, "- out_dir: `" + ur.out_dir + "`")
+    report = push(report, "- profile: " + ur.profile)
+  } else {
+    out.println("UNPACK FAIL: " + ur.error)
+    report = push(report, "- ok: false")
+    report = push(report, "- error: " + ur.error)
+    fs.write_text(outDir + "\\REPORT_GLTK.md", report)
+    return 3
+  }
+  report = push(report, "")
+  report = push(report, "## Conclusion")
+  report = push(report, "Pro host is .NET ILONLY + AHPK2 AES ZIP overlay. Keys recovered via `dotnet.il` / #US; payload unpacked via `ahpk2.unpack` (native). No Python required.")
+  report = push(report, "")
+
+  let repPath = outDir + "\\REPORT_GLTK.md"
+  fs.write_text(repPath, report)
+  out.println("wrote " + repPath)
+  out.println("=== done ===")
+  return 0
+}

@@ -1,0 +1,82 @@
+// ch04_09_bytes_as_array.glk — 用 int 数组模拟字节缓冲
+// .\gltk.exe run learn\examples\ch04_09_bytes_as_array.glk
+
+import out, str
+
+fn u8(arr, i) {
+  return arr[i]
+}
+
+fn u16le(arr, i) {
+  return arr[i] + arr[i + 1] * 256
+}
+
+fn u32le(arr, i) {
+  let b0 = arr[i]
+  let b1 = arr[i + 1]
+  let b2 = arr[i + 2]
+  let b3 = arr[i + 3]
+  return b0 + b1 * 256 + b2 * 65536 + b3 * 16777216
+}
+
+fn find_byte(arr, b) {
+  let i = 0
+  while i < len(arr) {
+    if arr[i] == b {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+fn ascii_preview(arr, maxn) {
+  let s = ""
+  let i = 0
+  let n = len(arr)
+  if n > maxn { n = maxn }
+  while i < n {
+    let c = arr[i]
+    if c >= 32 && c < 127 {
+      // 用已知可打印字符表拼（无 chr 时的简化：仅数字字母演示）
+      // 这里只放 '.' 替代，完整可用 native 后续章节
+      if c >= 48 && c <= 57 {
+        s = s + str.slice("0123456789", c - 48, c - 47)
+      } else {
+        s = s + "."
+      }
+    } else {
+      s = s + "."
+    }
+    i = i + 1
+  }
+  return s
+}
+
+fn main(args) {
+  // "MZ" + padding + int 1 little endian
+  let buf = [
+    0x4D, 0x5A, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00,
+    0x41, 0x42, 0x00
+  ]
+
+  out.println("len=", len(buf))
+  out.println("u8[0]=", u8(buf, 0), " u8[1]=", u8(buf, 1))
+  out.println("u16le@0=", u16le(buf, 0)) // 0x5A4D
+  out.println("u32le@4=", u32le(buf, 4)) // 1
+
+  out.println("find 0x00 =", find_byte(buf, 0))
+  out.println("find 0x41 =", find_byte(buf, 0x41))
+
+  // 统计空字节
+  let zeros = 0
+  for b in buf {
+    if b == 0 { zeros = zeros + 1 }
+  }
+  out.println("zero bytes=", zeros)
+
+  out.println("preview=", ascii_preview(buf, 16))
+
+  return 0
+}

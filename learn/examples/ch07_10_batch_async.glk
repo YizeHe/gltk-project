@@ -1,0 +1,59 @@
+// ch07_10_batch_async.glk — 并行对 batch 目录做 triage
+// .\gltk.exe run learn\examples\ch07_10_batch_async.glk
+
+import out, fs, async, crypto, bin
+
+fn triage_one(path) {
+  if !fs.exists(path) {
+    return {path: path, ok: false, error: "missing"}
+  }
+  let data = fs.read_bytes(path)
+  let mz = false
+  if bin.len(data) >= 2 {
+    mz = bin.u16le(data, 0) == 0x5A4D
+  }
+  return {
+    path: path,
+    ok: true,
+    size: bin.len(data),
+    mz: mz,
+    md5: crypto.md5_hex(data)
+  }
+}
+
+fn main(args) {
+  let root = "learn/testdata/re/batch"
+  if !fs.exists(root) {
+    out.println("missing batch dir")
+    return 1
+  }
+
+  // 收集路径
+  let names = fs.list_dir(root)
+  let paths = []
+  // list_dir 返回名字；拼路径——无 push 时用固定策略：parallel 直接对 names
+  // 改：构造完整路径数组（字面量动态难）——循环 spawn
+  out.println("files=", len(names))
+
+  let i = 0
+  let results = []
+  // 串行收集路径字符串数组：用 map 存？用 parallel 需要 array of paths
+  // 手工固定 batch 名
+  let fixed = [
+    "learn/testdata/re/batch/sample_0.bin",
+    "learn/testdata/re/batch/sample_1.bin",
+    "learn/testdata/re/batch/sample_2.bin",
+    "learn/testdata/re/batch/sample_3.bin",
+    "learn/testdata/re/batch/sample_4.bin"
+  ]
+
+  let reports = async.parallel(triage_one, fixed)
+  for r in reports {
+    if r.ok {
+      out.println(r.path, " size=", r.size, " mz=", r.mz, " md5=", r.md5)
+    } else {
+      out.println(r.path, " ERR", r.error)
+    }
+  }
+  return 0
+}

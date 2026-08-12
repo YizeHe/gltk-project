@@ -1,0 +1,19 @@
+// User-extendable stdlib helpers for I/O patterns.
+// Import: import "io_helpers.glk" as io_helpers
+// (resolved via <gltk root>/stdlib or GLTK_LIB)
+
+fn write_lines(path, lines) {
+  let f = open(path, "w")
+  for line in lines {
+    f.write(line + "\n")
+  }
+  f.close()
+  return true
+}
+
+fn read_all(path) {
+  let f = open(path, "r")
+  let s = f.read()
+  f.close()
+  return s
+}

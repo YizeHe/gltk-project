@@ -1,0 +1,34 @@
+// ch08_07_gui_smoke.glk — GUI 创建/show（不进入长阻塞 run，或极短交互）
+// Windows: .\gltk.exe run learn\examples\ch08_07_gui_smoke.glk
+// 验证控件创建；完整消息循环见 ch08_08
+
+import out, gui
+
+fn main(args) {
+  if !gui.available() {
+    out.println("gui.available=false (need Windows + CUI)")
+    return 2
+  }
+  out.println("gui.version=", gui.version())
+  gui.init()
+
+  let w = gui.window("CH08 GUI Smoke", 420, 200)
+  if typeof(w) != "map" {
+    out.println("window failed")
+    return 3
+  }
+
+  let lab = gui.label(w, "Hello CH08 — if you see this, create OK", 16, 16, 380, 28)
+  let ed = gui.lineedit(w, 16, 56, 280, 28)
+  gui.set_text(ed, "type here")
+  let b = gui.button(w, "OK", 16, 100, 100, 32)
+
+  out.println("handles:", typeof(lab), typeof(ed), typeof(b))
+  out.println("lineedit text=", gui.get_text(ed))
+
+  gui.show(w)
+  out.println("shown — not calling gui.run() in smoke (avoids blocking CI)")
+  out.println("PASS gui smoke create/show")
+  // 不 quit 强制销毁：进程退出即结束
+  return 0
+}

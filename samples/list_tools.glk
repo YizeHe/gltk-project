@@ -1,0 +1,26 @@
+// List bundled reverse-engineering tools via GLVM native module.
+import tools, out
+
+fn main(args) {
+    out.println("GLTK root:", tools.root())
+    out.println("java ok:", tools.java_ok())
+    out.println("")
+
+    let cat = ""
+    if len(args) > 0 {
+        cat = args[0]
+    }
+    let items = tools.list(cat)
+    out.println("count=", len(items))
+    let i = 0
+    while i < len(items) {
+        let t = items[i]
+        let ready = "no"
+        if t.available {
+            ready = "yes"
+        }
+        out.println(t.id, "\t", t.category, "\t", ready, "\t", t.name)
+        i = i + 1
+    }
+    return 0
+}

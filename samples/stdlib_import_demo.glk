@@ -1,0 +1,101 @@
+// stdlib_import_demo.glk — demonstrates stdlib library imports
+// Run: gltk run samples/stdlib_import_demo.glk
+
+import out, re
+import "stdlib/re_helpers.glk" as rh
+import "stdlib/hexutil.glk" as hexutil
+import "stdlib/pathutil.glk" as pathutil
+import "stdlib/textutil.glk" as textutil
+import "stdlib/prelude.glk" as prelude
+
+fn main(args) {
+    out.println("=== GrokLang Stdlib Import Demo ===")
+    out.println("")
+
+    // --- re_helpers ---
+    out.println("--- re_helpers ---")
+    let sample = "Contact alice@test.com or bob@work.org. Visit https://example.com/path?q=1"
+    sample = sample + " Server at 192.168.1.100 UUID=550e8400-e29b-41d4-a716-446655440000"
+
+    let emails = rh.extract_emails(sample)
+    out.println("emails:", len(emails))
+    let i = 0
+    while i < len(emails) {
+        out.println("  ", emails[i])
+        i = i + 1
+    }
+
+    let urls = rh.extract_urls(sample)
+    out.println("urls:", len(urls))
+    i = 0
+    while i < len(urls) {
+        out.println("  ", urls[i])
+        i = i + 1
+    }
+
+    let ips = rh.extract_ipv4(sample)
+    out.println("ipv4:", len(ips))
+    i = 0
+    while i < len(ips) {
+        out.println("  ", ips[i])
+        i = i + 1
+    }
+
+    let uuids = rh.extract_uuids(sample)
+    out.println("uuids:", len(uuids))
+    i = 0
+    while i < len(uuids) {
+        out.println("  ", uuids[i])
+        i = i + 1
+    }
+
+    out.println("has_pattern(digit):", rh.has_pattern("\d+", sample))
+    out.println("count_pattern(digit groups):", rh.count_pattern("\d+", sample))
+    out.println("first_match(uuid):", rh.first_match("[0-9a-f-]{36}", sample))
+    out.println("")
+
+    // --- hexutil ---
+    out.println("--- hexutil ---")
+    out.println("to_hex(255):", hexutil.to_hex(255))
+    out.println("to_hex(0xDEAD):", hexutil.to_hex(0xDEAD))
+    out.println("to_hex_padded(10, 8):", hexutil.to_hex_padded(10, 8))
+    out.println("hex8(0xDEADBEEF):", hexutil.hex8(0xDEADBEEF))
+    out.println("is_hex_string(DEADBEEF):", hexutil.is_hex_string("DEADBEEF"))
+    out.println("is_hex_string(ZZZZ):", hexutil.is_hex_string("ZZZZ"))
+    out.println("hex_to_int(FF):", hexutil.hex_to_int("FF"))
+    out.println("")
+
+    // --- pathutil ---
+    out.println("--- pathutil ---")
+    out.println("basename('/a/b/c.txt'):", pathutil.basename("/a/b/c.txt"))
+    out.println("dirname('/a/b/c.txt'):", pathutil.dirname("/a/b/c.txt"))
+    out.println("ext('file.tar.gz'):", pathutil.ext("file.tar.gz"))
+    out.println("stem('file.tar.gz'):", pathutil.stem("file.tar.gz"))
+    out.println("join2('/a', 'b'):", pathutil.join2("/a", "b"))
+    out.println("join3('C:\Users', 'test', 'file.txt'):", pathutil.join3("C:\Users", "test", "file.txt"))
+    out.println("is_absolute('/usr/bin'):", pathutil.is_absolute("/usr/bin"))
+    out.println("is_absolute('relative'):", pathutil.is_absolute("relative"))
+    out.println("")
+
+    // --- textutil ---
+    out.println("--- textutil ---")
+    let code = "fn hello() {\n  // comment\n  return 42\n}\n"
+    out.println("lines:", textutil.count_lines(code))
+    out.println("word_count:", textutil.word_count(code))
+
+    let stripped = textutil.strip_line_comments(code)
+    out.println("after strip comments:")
+    out.println(stripped)
+
+    out.println("grep 'return':", len(textutil.grep("return", code)))
+    out.println("")
+
+    // --- prelude ---
+    out.println("--- prelude ---")
+    out.println("min(3, 7):", prelude.min(3, 7))
+    out.println("max(3, 7):", prelude.max(3, 7))
+    out.println("")
+
+    out.println("=== all stdlib demos passed ===")
+    return 0
+}

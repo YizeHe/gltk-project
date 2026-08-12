@@ -1,0 +1,52 @@
+// ch07_03_strings_scan.glk — str.scan / strings_re.extract 扫特征
+// .\gltk.exe run learn\examples\ch07_03_strings_scan.glk
+// .\gltk.exe run learn\examples\ch07_03_strings_scan.glk -- learn\testdata\re\01_strings_ahk_markers.bin
+
+import out, fs, str, strings_re
+
+fn main(args) {
+  let path = "learn/testdata/re/01_strings_ahk_markers.bin"
+  if len(args) > 0 { path = args[0] }
+  if !fs.exists(path) {
+    out.println("missing", path)
+    return 1
+  }
+  let data = fs.read_bytes(path)
+  out.println("file=", path, " size=", len(data))
+
+  // str.scan: AHK/通用可打印串
+  let hits = str.scan(data, 4)
+  out.println("str.scan count=", len(hits))
+  let markers = ["AutoHotkey", "ScriptGuard", "Ahk2Exe", "#NoEnv", "SendInput", "FileInstall", "password", "http"]
+  let found = 0
+  for i in range(0, len(hits)) {
+    let h = hits[i]
+    let low = str.lower(h.text)
+    for j in range(0, len(markers)) {
+      if str.contains(low, str.lower(markers[j])) {
+        out.println(" [", h.enc, " @", h.off, "] ", markers[j], " :: ", h.text)
+        found = found + 1
+      }
+    }
+  }
+  out.println("marker hits=", found)
+
+  // strings_re.extract
+  let ascii = strings_re.extract(data, 4)
+  out.println("strings_re.extract ascii=", len(ascii))
+  let n = len(ascii)
+  if n > 15 { n = 15 }
+  for i in range(0, n) {
+    out.println("  @", ascii[i].offset, ": ", ascii[i].value)
+  }
+
+  let u16 = strings_re.extract_utf16(data, 4)
+  out.println("utf16 strings=", len(u16))
+  let m = len(u16)
+  if m > 8 { m = 8 }
+  for i in range(0, m) {
+    out.println("  u16 @", u16[i].offset, ": ", u16[i].value)
+  }
+
+  return 0
+}

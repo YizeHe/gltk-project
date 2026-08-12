@@ -1,0 +1,27 @@
+// ch08_06_ws_smoke.glk — WebSocket 烟雾（公共 echo，可能因网络失败）
+// .\gltk.exe run learn\examples\ch08_06_ws_smoke.glk
+
+import out, ws
+
+fn main(args) {
+  // 公共 echo 服务，不保证永远可用
+  let url = "wss://echo.websocket.events"
+  if len(args) > 0 { url = args[0] }
+
+  out.println("connect", url)
+  let c = ws.connect(url, {timeout: 15})
+  out.println("connect ok=", c.ok, " err=", c.error)
+  if !c.ok {
+    out.println("WS unavailable — skip (offline or service down)")
+    return 0
+  }
+
+  let s = ws.send(c, "hello-ch08", false)
+  out.println("send ok=", s.ok)
+
+  let m = ws.recv(c, 10)
+  out.println("recv type=", m.type, " text=", m.text)
+
+  ws.close(c)
+  return 0
+}

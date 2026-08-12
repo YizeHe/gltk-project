@@ -1,0 +1,31 @@
+// ch03_08_import.glk — import native 与路径库
+// .\gltk.exe run learn\examples\ch03_08_import.glk
+
+import out
+import json
+// 路径库：相对入口文件或搜索路径
+import "learn/examples/ch03_lib_math.glk" as m
+// 也可用官方 helpers
+import "libs/helpers.glk" as helpers
+
+fn main(args) {
+  // native：out / json
+  out.println("native out ok")
+  let obj = {a: 1, b: "two"}
+  out.println("json=", json.stringify(obj))
+  let back = json.parse("{\"x\":10}")
+  out.println("parsed x=", back.x)
+
+  // 用户库
+  out.println("clamp(15,0,10)=", m.clamp(15, 0, 10))
+  out.println("abs(-3)=", m.abs(-3))
+  out.println("sum=", m.sum_arr([1, 2, 3, 4]))
+
+  out.println("helpers.double(21)=", helpers.double(21))
+  out.println("helpers.add(20,22)=", helpers.add(20, 22))
+
+  // 警告：import str 会占全局名 str
+  // 需要 str 模块时用 str.slice；转换用 ""+x 或 to_str
+
+  return 0
+}

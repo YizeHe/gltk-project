@@ -1,0 +1,26 @@
+// ch09_04_obfus_compare.glk — 对比有无混淆的 glkb 体积（通过 pack 返回值）
+// .\gltk.exe run learn\examples\ch09_04_obfus_compare.glk
+
+import out, pack, fs
+
+fn main(args) {
+  let src = "learn/examples/ch09_01_tool.glk"
+  let a = "learn/examples/_tmp_ch09_with_obfus.exe"
+  let b = "learn/examples/_tmp_ch09_no_obfus.exe"
+
+  let r1 = pack.pack(src, a, {no_obfus: false})
+  let r2 = pack.pack(src, b, {no_obfus: true})
+
+  if !r1.ok || !r2.ok {
+    out.println("pack fail", r1.error, r2.error)
+    return 1
+  }
+
+  out.println("WITH obfuscation:")
+  out.println("  glkb=", r1.glkb_size, " cipher=", r1.cipher_size, " consts=", r1.consts, " protos=", r1.protos)
+  out.println("WITHOUT obfuscation:")
+  out.println("  glkb=", r2.glkb_size, " cipher=", r2.cipher_size, " consts=", r2.consts, " protos=", r2.protos)
+  out.println("delta glkb=", r1.glkb_size - r2.glkb_size, " (obfus usually larger)")
+  out.println("exe sizes:", r1.exe_size, r2.exe_size, "(dominated by glrt stub)")
+  return 0
+}

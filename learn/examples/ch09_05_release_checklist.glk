@@ -1,0 +1,24 @@
+// ch09_05_release_checklist.glk — 发布检查单
+// .\gltk.exe run learn\examples\ch09_05_release_checklist.glk
+
+import out
+
+fn main(args) {
+  let items = [
+    "1. go build -o gltk.exe ./cmd/gltk && go build -o glrt.exe ./cmd/glrt",
+    "2. gltk run your.glk -- 自测所有路径/参数",
+    "3. gltk compile your.glk -o your.glkb  (可选存档)",
+    "4. gltk disasm your.glkb | more  (确认无意外字符串/调试残留)",
+    "5. gltk pack your.glk -o dist/tool.exe   (默认混淆)",
+    "6. 干净目录只放 tool.exe 双击/命令行复测",
+    "7. 记录 gltk version + 输入哈希 + 输出哈希",
+    "8. 不要把密钥/内网地址硬编码进公开仓库",
+    "9. 需要调试再 --no-obfus 或 --keep-glkb",
+    "10. GUI 工具注意 FreeConsole/windowsgui 与工作目录"
+  ]
+  out.println("=== GLTK Release Checklist ===")
+  for s in items {
+    out.println(s)
+  }
+  return 0
+}

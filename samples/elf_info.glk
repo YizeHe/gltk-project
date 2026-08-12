@@ -1,0 +1,56 @@
+// elf_info.glk — parse an ELF file and print headers / sections / symbols
+// usage: gltk run samples/elf_info.glk -- <path-to-elf>
+import elf, fs, out
+
+fn main(args) {
+  if len(args) < 1 {
+    out.println("usage: gltk run elf_info.glk -- <path-to-elf>")
+    return 1
+  }
+  let path = args[0]
+  if !fs.exists(path) {
+    out.println("file not found: " + path)
+    return 1
+  }
+  if !elf.is_elf(path) {
+    out.println("not an ELF file: " + path)
+    return 1
+  }
+
+  let info = elf.parse(path)
+  out.println("ELF " + info.class + " " + info.data + " " + info.type + " " + info.machine)
+  out.println("entry=" + ("" + info.entry) + " size=" + ("" + info.size))
+  out.println("sections=" + ("" + len(info.sections)) + " segments=" + ("" + len(info.segments)) + " symbols=" + ("" + len(info.symbols)))
+
+  out.println("--- sections ---")
+  let secs = info.sections
+  for i in range(0, len(secs)) {
+    let s = secs[i]
+    out.println("  [" + s.name + "] type=" + s.type + " addr=" + ("" + s.addr) + " off=" + ("" + s.offset) + " size=" + ("" + s.size))
+  }
+
+  out.println("--- segments ---")
+  let segs = info.segments
+  for i in range(0, len(segs)) {
+    let p = segs[i]
+    out.println("  " + p.type + " " + p.flags_str + " vaddr=" + ("" + p.vaddr) + " filesz=" + ("" + p.filesz) + " memsz=" + ("" + p.memsz))
+  }
+
+  out.println("--- symbols (first 40) ---")
+  let syms = info.symbols
+  let n = len(syms)
+  if n > 40 {
+    n = 40
+  }
+  for i in range(0, n) {
+    let sy = syms[i]
+    if sy.name == "" {
+      continue
+    }
+    out.println("  " + sy.bind + " " + sy.type + " " + sy.name + " @" + ("" + sy.value) + " size=" + ("" + sy.size))
+  }
+
+  let sum = elf.summary(path)
+  out.println("summary: class=" + sum.class + " machine=" + sum.machine + " section_count=" + ("" + sum.section_count) + " symbol_count=" + ("" + sum.symbol_count))
+  return 0
+}

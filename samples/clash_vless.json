@@ -1,0 +1,16 @@
+{
+  "socks-port": 10808,
+  "proxies": [
+    {
+      "name": "vless-demo",
+      "type": "vless",
+      "server": "YOUR_SERVER_IP_OR_DOMAIN",
+      "port": 443,
+      "uuid": "00000000-0000-0000-0000-000000000000",
+      "tls": true,
+      "servername": "YOUR_SNI_OR_DOMAIN",
+      "network": "tcp",
+      "skip-cert-verify": true
+    }
+  ]
+}

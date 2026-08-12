@@ -1,0 +1,53 @@
+// scriptguard_decrypt.glk — decrypt ScriptGuard1 payload using embedded AHK.exe key
+// Expects GTAOL extract tree relative to gltk cwd:
+//   ../GTAOL/extract/resources/RCDATA_1_1033.bin
+//   ../GTAOL/extract/resources/RCDATA_AUTOHOTKEY.EXE_1033.bin
+import fs, out, ahk, str
+
+fn main(args) {
+  let rcdata = "../GTAOL/extract/resources/RCDATA_1_1033.bin"
+  let ahkexe = "../GTAOL/extract/resources/RCDATA_AUTOHOTKEY.EXE_1033.bin"
+  let outpath = "../GTAOL/extract/script_decrypted_gltk.ahk"
+
+  if len(args) >= 1 {
+    rcdata = args[0]
+  }
+  if len(args) >= 2 {
+    ahkexe = args[1]
+  }
+  if len(args) >= 3 {
+    outpath = args[2]
+  }
+
+  if !fs.exists(rcdata) || !fs.exists(ahkexe) {
+    out.println("skip: ScriptGuard extract paths not found")
+    out.println("  looked for: " + rcdata)
+    out.println("  looked for: " + ahkexe)
+    out.println("provide: gltk run scriptguard_decrypt.glk -- <rcdata> <ahk.exe> [out.ahk]")
+    return 0
+  }
+
+  out.println("reading rcdata: " + rcdata)
+  let text = fs.read_text(rcdata)
+  let dwords = ahk.extract_u_dwords(text)
+  out.println("encrypted dwords: " + ("" + len(dwords)))
+
+  out.println("reading key material: " + ahkexe)
+  let key = fs.read_bytes(ahkexe)
+  out.println("key bytes: " + ("" + len(key)))
+
+  let plain = ahk.decrypt_scriptguard(key, dwords)
+  out.println("decrypted raw bytes: " + ("" + len(plain)))
+
+  // try utf-16le then utf-8
+  let script = ahk.decode_utf16le(plain)
+  if str.contains(str.lower(script), "send") || str.contains(str.lower(script), "hotkey") || str.contains(script, "#") {
+    fs.write_text(outpath, script)
+    out.println("wrote UTF-16LE decode: " + outpath)
+    return 0
+  }
+  script = str.from_utf8(plain)
+  fs.write_text(outpath, script)
+  out.println("wrote UTF-8 decode: " + outpath)
+  return 0
+}

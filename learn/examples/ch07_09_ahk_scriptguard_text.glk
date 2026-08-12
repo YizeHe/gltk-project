@@ -1,0 +1,37 @@
+// ch07_09_ahk_scriptguard_text.glk — ScriptGuard u-dwords 文本抽取
+// .\gltk.exe run learn\examples\ch07_09_ahk_scriptguard_text.glk
+
+import out, fs, ahk
+
+fn main(args) {
+  let path = "learn/testdata/re/06_scriptguard_u_style.txt"
+  if len(args) > 0 { path = args[0] }
+  if !fs.exists(path) {
+    out.println("missing", path)
+    return 1
+  }
+  let text = fs.read_text(path)
+  out.println("text=", text)
+
+  let dws = ahk.extract_u_dwords(text)
+  out.println("dwords count=", len(dws))
+  let i = 0
+  while i < len(dws) {
+    out.println(" ", i, dws[i])
+    i = i + 1
+  }
+
+  // UTF-16 LE decode demo
+  // 构造：'A' 'B' as utf16le bytes via bin then decode
+  // ahk.decode_utf16le(bytes)
+  out.println("is_scriptguard2? on text path may be false for synthetic")
+  try {
+    out.println("sg2=", ahk.is_scriptguard2(text))
+  } catch e {
+    out.println("sg2 check:", e)
+  }
+
+  out.println("NOTE: full decrypt needs real RCDATA blob from AHK-packed PE")
+  out.println("see samples/scriptguard_decrypt.glk and samples/gtamacro_unpack.glk")
+  return 0
+}

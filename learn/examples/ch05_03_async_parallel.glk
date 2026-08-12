@@ -1,0 +1,33 @@
+// ch05_03_async_parallel.glk — parallel 批处理
+// .\gltk.exe run learn\examples\ch05_03_async_parallel.glk
+
+import out, async
+
+fn work(item) {
+  // 模拟扫一个「路径」或样本 id
+  async.sleep(20)
+  return {id: item, score: item * 10, ok: true}
+}
+
+fn main(args) {
+  let items = [1, 2, 3, 4, 5]
+  out.println("parallel over", len(items), "items...")
+
+  let results = async.parallel(work, items)
+  out.println("got", len(results), "results")
+
+  let i = 0
+  while i < len(results) {
+    let r = results[i]
+    out.println(" ", r.id, "score=", r.score, "ok=", r.ok)
+    i = i + 1
+  }
+
+  // 聚合
+  let sum = 0
+  for r in results {
+    sum = sum + r.score
+  }
+  out.println("sum scores=", sum)
+  return 0
+}

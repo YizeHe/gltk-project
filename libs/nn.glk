@@ -1,0 +1,86 @@
+import tensor
+// GrokTorch Neural Network building blocks
+// Uses maps to hold layer state: {w: tensor, b: tensor, ...}
+
+// ============================================================
+//  Linear: y = x @ W^T + b
+// ============================================================
+
+fn nn_linear(in_features, out_features) {
+  // Kaiming initialization
+  scale = tensor.to_value(tensor.sqrt(2.0 / in_features))
+  w = tensor.mul(tensor.randn([out_features, in_features]), scale)
+  b = tensor.zeros([out_features])
+  return {"w": w, "b": b}
+}
+
+fn nn_linear_forward(layer, x) {
+  // x: [..., in_features], returns [..., out_features]
+  wt = tensor.transpose(layer["w"])
+  y = tensor.matmul(x, wt)
+  return tensor.add(y, layer["b"])
+}
+
+fn nn_linear_parameters(layer) {
+  return [layer["w"], layer["b"]]
+}
+
+// ============================================================
+//  Embedding: lookup table
+// ============================================================
+
+fn nn_embedding(num_embeddings, embedding_dim) {
+  w = tensor.mul(tensor.randn([num_embeddings, embedding_dim]), 0.02)
+  return {"w": w}
+}
+
+fn nn_embedding_forward(emb, indices) {
+  // indices: array of ints like [0, 5, 2]
+  // Returns tensor [len(indices), embedding_dim]
+  return tensor.embed_lookup(emb["w"], indices)
+}
+
+fn nn_embedding_parameters(emb) {
+  return [emb["w"]]
+}
+
+// ============================================================
+//  LayerNorm: global normalization (approximation)
+//  For small models this works well enough.
+// ============================================================
+
+fn nn_layernorm(normalized_shape) {
+  gamma = tensor.ones([normalized_shape])
+  beta = tensor.zeros([normalized_shape])
+  return {"gamma": gamma, "beta": beta, "eps": 1e-5}
+}
+
+fn nn_layernorm_forward(ln, x) {
+  // x: any shape, normalize using global statistics
+  mean_val = tensor.to_value(tensor.mean(x))
+  // center: x - mean
+  neg_mean = -mean_val
+  centered = tensor.add(x, neg_mean)
+  // variance: mean(centered^2)
+  sq = tensor.mul(centered, centered)
+  var_val = tensor.to_value(tensor.mean(sq))
+  // normalize
+  std = tensor.sqrt(var_val + ln["eps"])
+  std_val = tensor.to_value(std)
+  normed = tensor.div(centered, std_val)
+  // scale and shift
+  scaled = tensor.mul(normed, ln["gamma"])
+  return tensor.add(scaled, ln["beta"])
+}
+
+fn nn_layernorm_parameters(ln) {
+  return [ln["gamma"], ln["beta"]]
+}
+
+// ============================================================
+//  Dropout: identity (no-op for simplicity)
+// ============================================================
+
+fn nn_dropout_forward(x, p) {
+  return x
+}

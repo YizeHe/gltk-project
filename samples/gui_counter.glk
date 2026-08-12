@@ -1,0 +1,76 @@
+// gui_counter.glk — simple GUI smoke demo (CUI backend)
+// Usage:
+//   gltk run samples/gui_counter.glk
+//
+// UI: name field, counter, +1 / reset / greet / quit
+
+import gui, out
+
+let g_name = null
+let g_count_lab = null
+let g_log = null
+let g_n = 0
+
+fn bump() {
+  g_n = g_n + 1
+  gui.set_text(g_count_lab, "Count: " + ("" + g_n))
+  gui.append_text(g_log, "clicked +1 -> " + ("" + g_n) + "\n")
+}
+
+fn reset() {
+  g_n = 0
+  gui.set_text(g_count_lab, "Count: 0")
+  gui.append_text(g_log, "reset\n")
+}
+
+fn greet() {
+  let name = gui.get_text(g_name)
+  if name == "" {
+    name = "friend"
+  }
+  let msg = "Hello, " + name + "! count=" + ("" + g_n)
+  gui.append_text(g_log, msg + "\n")
+  gui.msgbox(msg, "GrokLang GUI")
+}
+
+fn on_quit() {
+  gui.append_text(g_log, "quit\n")
+  gui.quit()
+}
+
+fn main(args) {
+  if !gui.available() {
+    out.println("gui.available = false (need Windows + CUI)")
+    return 1
+  }
+  out.println("gui version:", gui.version())
+  gui.init()
+
+  let w = gui.window("GLTK Simple GUI", 480, 360)
+  gui.label(w, "Name:", 20, 20, 60, 24)
+  g_name = gui.lineedit(w, 80, 18, 280, 28)
+  gui.set_text(g_name, "Grok")
+
+  g_count_lab = gui.label(w, "Count: 0", 20, 60, 200, 24)
+
+  let b1 = gui.button(w, "+1", 20, 100, 80, 32)
+  let b2 = gui.button(w, "Reset", 110, 100, 80, 32)
+  let b3 = gui.button(w, "Greet", 200, 100, 80, 32)
+  let b4 = gui.button(w, "Quit", 290, 100, 80, 32)
+
+  let chk = gui.checkbox(w, "Verbose log", 20, 145, 160, 28)
+
+  g_log = gui.textedit(w, 20, 180, 430, 140)
+  gui.set_text(g_log, "GLTK GUI counter demo\nClick buttons to test events.\n")
+
+  gui.on_click(b1, bump)
+  gui.on_click(b2, reset)
+  gui.on_click(b3, greet)
+  gui.on_click(b4, on_quit)
+
+  gui.show(w)
+  out.println("gui.run() — interact, then Quit or close window")
+  gui.run()
+  out.println("gui exited cleanly")
+  return 0
+}

@@ -1,0 +1,45 @@
+// ch07_04_entropy.glk — 熵：定位加密/压缩区
+// .\gltk.exe run learn\examples\ch07_04_entropy.glk -- learn\testdata\re\02_entropy_mixed.bin
+
+import out, fs, strings_re, bin
+
+fn main(args) {
+  let path = "learn/testdata/re/02_entropy_mixed.bin"
+  if len(args) > 0 { path = args[0] }
+
+  let data = null
+  if fs.exists(path) {
+    data = fs.read_bytes(path)
+    out.println("loaded", path)
+  } else {
+    data = bin.concat("AAAAAAAAAAAA", bin.from_u32le([0x9a3c7e11, 0x55f0ab92, 0xc1d4e87f, 0x2468ace0]))
+    out.println("synthetic data")
+  }
+
+  out.println("size=", len(data))
+  out.println("entropy_all=", strings_re.entropy_all(data))
+
+  let blocks = strings_re.entropy_map(data, 16)
+  out.println("blocks=", len(blocks))
+  let i = 0
+  while i < len(blocks) && i < 12 {
+    let b = blocks[i]
+    out.println(" @", b.offset, " H=", b.entropy, " size=", b.size)
+    i = i + 1
+  }
+
+  let hi = strings_re.find_high_entropy(data, 5.5, 16)
+  out.println("high regions thr=5.5 count=", len(hi))
+  for j in range(0, len(hi)) {
+    let r = hi[j]
+    out.println("  HIGH @", r.offset, " size=", r.size, " H=", r.entropy)
+  }
+
+  // 经验：高熵 → 可能是加密壳/压缩；低熵 → 代码/字符串/填充
+  if len(hi) > 0 {
+    out.println("HINT: inspect high-entropy regions with hex dump / unpackers")
+  } else {
+    out.println("HINT: mostly low entropy — plain text or padding?")
+  }
+  return 0
+}

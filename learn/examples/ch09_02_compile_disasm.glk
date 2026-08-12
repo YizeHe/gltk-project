@@ -1,0 +1,18 @@
+// ch09_02_compile_disasm.glk — 讲解用：运行前请先 compile 再 disasm（见章正文命令）
+// 本文件本身演示「有意义的常量池」便于 disasm 阅读
+// .\gltk.exe compile learn\examples\ch09_02_compile_disasm.glk -o learn\examples\_tmp_ch09_02.glkb
+// .\gltk.exe disasm learn\examples\_tmp_ch09_02.glkb
+// .\gltk.exe run learn\examples\_tmp_ch09_02.glkb
+
+import out
+
+fn add(a, b) {
+  return a + b
+}
+
+fn main(args) {
+  let msg = "disasm-me"
+  out.println(msg)
+  out.println("2+3=", add(2, 3))
+  return 0
+}

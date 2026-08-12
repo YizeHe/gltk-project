@@ -1,0 +1,39 @@
+// ch06_03_fs_list_walk.glk — list_dir / walk / exists
+// .\gltk.exe run learn\examples\ch06_03_fs_list_walk.glk
+
+import out, fs, str
+
+fn main(args) {
+  let root = "learn/examples"
+  out.println("exists learn/examples?", fs.exists(root))
+
+  out.println("-- list_dir --")
+  let entries = fs.list_dir(root)
+  // entries 结构以实现为准：常见为名字数组或 map 列表
+  out.println("typeof list=", typeof(entries), " len=", len(entries))
+  let i = 0
+  let limit = len(entries)
+  if limit > 15 { limit = 15 }
+  while i < limit {
+    out.println(" ", entries[i])
+    i = i + 1
+  }
+
+  out.println("-- walk (may be recursive file paths) --")
+  let files = fs.walk(root)
+  out.println("walk typeof=", typeof(files), " len=", len(files))
+  let shown = 0
+  for p in files {
+    // 只展示 ch04/ch05/ch06 相关
+    let s = "" + p
+    if str.contains(s, "ch04") || str.contains(s, "ch05") || str.contains(s, "ch06") {
+      out.println(" ", s)
+      shown = shown + 1
+      if shown >= 12 {
+        break
+      }
+    }
+  }
+
+  return 0
+}
