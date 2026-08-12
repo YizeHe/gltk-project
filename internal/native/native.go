@@ -37,6 +37,7 @@ func DefaultModules() map[string]vm.Value {
 		"dotnet":     moduleDotnet(),
 		"pack":       modulePack(),
 		"upx":        moduleUPX(),
+		"vmp":        moduleVMP(),
 		"time":       moduleTime(),
 		"rand":       moduleRand(),
 		"sort":       moduleSort(),

@@ -33,7 +33,12 @@
 - `docs/ROADMAP_1.0.md`, this CHANGELOG.
 - CLI `gltk version` → **1.0.0**.
 
+### VMP assist (1.0.x tool landing)
+- **`import vmp`** / CLI **`gltk vmp`**: detect, info, extract, fixdump, assist.
+- Scope: signature triage + section extract + memory-dump PE header fix.
+- **Not** full VMP handler de-virtualization.
+
 ### Not in 1.0 (explicit)
-- Capstone-level full ISA semantics, Enigma/VMP unpackers, package manager, debugger UI.
+- Capstone-level full ISA semantics, full Enigma/VMP de-virtualizers, package manager, debugger UI.
 - Pretty GUI theming / full dialog keyboard navigation.
 - Dynamic debugging / process injection.

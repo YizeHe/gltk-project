@@ -582,7 +582,7 @@ func simpleBroadcast(aData, bData []float32, aShape, bShape []int64) ([]float32,
 		} else if bDim == 1 {
 			bcShape[di] = aDim
 		} else {
-			return nil, nil, errf("broadcast not supported for " + fmtShape(aShape) + " vs " + fmtShape(bShape) + ". Use tensor.reshape first")
+			return nil, nil, errf("broadcast not supported for %s vs %s. Use tensor.reshape first", fmtShape(aShape), fmtShape(bShape))
 		}
 	}
 	// If broadcast shape equals aShape, no expansion needed for A
@@ -817,12 +817,12 @@ func tMatmul(_ *vm.VM, args []vm.Value) (vm.Value, error) {
 		return vm.Null(), err
 	}
 	if len(aS) != 2 || len(bS) != 2 {
-		return vm.Null(), errf("matmul requires 2D tensors, got shapes " + fmtShape(aS) + " and " + fmtShape(bS))
+		return vm.Null(), errf("matmul requires 2D tensors, got shapes %s and %s", fmtShape(aS), fmtShape(bS))
 	}
 	m, k := aS[0], aS[1]
 	k2, n := bS[0], bS[1]
 	if k != k2 {
-		return vm.Null(), errf("matmul shape mismatch: [M,K]@[K,N], got K=" + fmtInt(k) + " vs " + fmtInt(k2))
+		return vm.Null(), errf("matmul shape mismatch: [M,K]@[K,N], got K=%s vs %s", fmtInt(k), fmtInt(k2))
 	}
 	out := make([]float32, m*n)
 	for i := int64(0); i < m; i++ {
@@ -1920,7 +1920,7 @@ func tCat(_ *vm.VM, args []vm.Value) (vm.Value, error) {
 	for i, t := range tensors {
 		d, s, err := tensorData(t)
 		if err != nil {
-			return vm.Null(), errf("tensor.cat: element " + fmtInt(int64(i)) + " is not a tensor")
+			return vm.Null(), errf("tensor.cat: element %s is not a tensor", fmtInt(int64(i)))
 		}
 		if len(s) == 0 {
 			return vm.Null(), errf("tensor.cat: scalar tensors not supported")

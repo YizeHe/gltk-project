@@ -1,0 +1,65 @@
+// vmp_assist.glk — VMProtect detection / extract / dump-header fix
+// Usage:
+//   gltk run samples/vmp_assist.glk -- <pe.exe|dll> [out_dir]
+//   gltk vmp assist <pe> <out_dir>
+import vmp, pe, fs, out
+
+fn main(args) {
+  if len(args) < 1 {
+    out.println("usage: gltk run samples/vmp_assist.glk -- <file.exe|dll> [out_dir]")
+    out.println("   or: gltk vmp detect|info|extract|fixdump|assist ...")
+    return 1
+  }
+  let inp = args[0]
+  if !fs.exists(inp) {
+    out.println("missing", inp)
+    return 1
+  }
+  let outDir = inp + ".vmp_out"
+  if len(args) >= 2 {
+    outDir = args[1]
+  }
+
+  out.println("--- vmp.info ---")
+  let info = vmp.info(inp)
+  out.println("is_vmp=", info.is_vmp, " confidence=", info.confidence)
+  out.println("entry_rva=0x", info.entry_rva, " entry_section=", info.entry_section)
+  out.println("empty_disk_sections=", info.empty_disk_sections, " sections=", info.number_of_sections)
+  out.println("note=", info.note)
+  if typeof(info.reasons) == "array" {
+    let i = 0
+    while i < len(info.reasons) {
+      out.println("  reason:", info.reasons[i])
+      i = i + 1
+    }
+  }
+  if typeof(info.sections) == "array" {
+    let j = 0
+    while j < len(info.sections) {
+      let s = info.sections[j]
+      out.println(" ", s.name, " VA=", s.va, " VSize=", s.vsize, " Raw=", s.raw_size, " empty=", s.disk_empty, " vmp=", s.vmp_like)
+      j = j + 1
+    }
+  }
+
+  out.println("--- vmp.assist ---")
+  let r = vmp.assist(inp, outDir)
+  out.println("ok=", r.ok, " out_dir=", r.out_dir)
+  if typeof(r.hint) == "string" {
+    out.println("hint=", r.hint)
+  }
+  if typeof(r.fixed_dump) == "string" {
+    out.println("fixed_dump=", r.fixed_dump)
+  }
+
+  out.println("--- pe.summary (input) ---")
+  let psi = pe.summary(inp)
+  if typeof(psi.ok) != "null" {
+    out.println("pe.summary ok-ish path=", inp)
+  }
+  out.println("DONE. See", outDir, "/vmp_report.txt")
+  if info.is_vmp != true {
+    return 2
+  }
+  return 0
+}

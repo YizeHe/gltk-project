@@ -17,6 +17,7 @@ import (
 	"groklang/gltk/internal/packer"
 	"groklang/gltk/internal/parser"
 	"groklang/gltk/internal/toolkit"
+	"groklang/gltk/internal/vmp"
 	"groklang/gltk/internal/vm"
 	"groklang/gltk/internal/wxapkg"
 )
@@ -58,6 +59,8 @@ func Run(args []string) int {
 		return cmdRepl(rest)
 	case "pack":
 		return cmdPack(rest)
+	case "vmp":
+		return cmdVMP(rest)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", cmd)
 		printUsage()
@@ -88,6 +91,7 @@ Bundled reverse tools (droidReverse / wxapkg / Win labs / Z0F course / awesome l
 Other:
   gltk tool <name> [args]              # python side plugins under tools/python
   gltk wxapkg unpack <file> <outdir> [wxid]
+  gltk vmp detect|info|extract|fixdump|assist <args>   # VMProtect assist (not full de-virtualize)
 
 Execution always goes through GLVM bytecode (register VM), never AST eval.
 Libraries: import "path/lib.glk" [as alias]; search via GLTK_LIB and stdlib/libs.
@@ -392,6 +396,112 @@ func cmdWxapkg(args []string) int {
 	default:
 		fmt.Fprintf(os.Stderr, "unknown wxapkg subcommand %q\n", sub)
 		fmt.Fprintln(os.Stderr, "usage: gltk wxapkg unpack <file> <outdir> [wxid]")
+		return 1
+	}
+}
+
+func cmdVMP(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, `usage:
+  gltk vmp detect  <file>
+  gltk vmp info    <file>
+  gltk vmp extract <file> <outdir>
+  gltk vmp fixdump <dump.exe> [out.exe]
+  gltk vmp assist  <file> <outdir>`)
+		return 1
+	}
+	sub := args[0]
+	rest := args[1:]
+	switch sub {
+	case "detect":
+		if len(rest) < 1 {
+			fmt.Fprintln(os.Stderr, "usage: gltk vmp detect <file>")
+			return 1
+		}
+		data, err := os.ReadFile(rest[0])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if vmp.Detect(data) {
+			fmt.Println("is_vmp=true")
+			return 0
+		}
+		fmt.Println("is_vmp=false")
+		return 2
+	case "info", "analyze", "report":
+		if len(rest) < 1 {
+			fmt.Fprintln(os.Stderr, "usage: gltk vmp info <file>")
+			return 1
+		}
+		data, err := os.ReadFile(rest[0])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		info, err := vmp.Analyze(data)
+		if err != nil && info == nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Print(vmp.FormatReport(info))
+		if info != nil && info.IsVMP {
+			return 0
+		}
+		return 2
+	case "extract":
+		if len(rest) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: gltk vmp extract <file> <outdir>")
+			return 1
+		}
+		data, err := os.ReadFile(rest[0])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		res, err := vmp.Extract(data, rest[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("ok=%v is_vmp=%v out=%v report=%v\n", res["ok"], res["is_vmp"], res["out_dir"], res["report"])
+		return 0
+	case "fixdump":
+		if len(rest) < 1 {
+			fmt.Fprintln(os.Stderr, "usage: gltk vmp fixdump <dump.exe> [out.exe]")
+			return 1
+		}
+		out := rest[0] + ".fixed.exe"
+		if len(rest) >= 2 {
+			out = rest[1]
+		}
+		res, err := vmp.FixDumpFile(rest[0], out)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("ok=%v out=%v size=%v note=%v\n", res["ok"], res["out"], res["size"], res["note"])
+		return 0
+	case "assist":
+		if len(rest) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: gltk vmp assist <file> <outdir>")
+			return 1
+		}
+		res, err := vmp.Assist(rest[0], rest[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("ok=%v is_vmp=%v confidence=%v out_dir=%v\n", res["ok"], res["is_vmp"], res["confidence"], res["out_dir"])
+		if h, ok := res["hint"]; ok {
+			fmt.Println("hint:", h)
+		}
+		if n, ok := res["note"]; ok {
+			fmt.Println("note:", n)
+		}
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "unknown vmp subcommand %q\n", sub)
 		return 1
 	}
 }

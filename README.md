@@ -112,6 +112,7 @@ import "libs/helpers.glk" as h     // 显式别名
 | `net_demo.glk` / `async_demo.glk` | 网络 / 异步 |
 | `pack_hello.glk` | 打包 EXE |
 | `upx_unpack.glk` | UPX（纯 Go 路径） |
+| `vmp_assist.glk` | VMP 检测/提取/dump 修头 |
 
 部分示例需要在 `--` 后传入 **你自己的** 二进制路径。  
 仓库 **不** 附带恶意样本集。

@@ -112,6 +112,7 @@ All files under `samples/` ship in this repo, including:
 | `net_demo.glk` / `async_demo.glk` | Network / async |
 | `pack_hello.glk` | Pack to EXE |
 | `upx_unpack.glk` | UPX (pure Go path) |
+| `vmp_assist.glk` | VMP detect / extract / dump fix |
 
 Some demos expect you to pass **your own** binary paths on the command line after `--`.  
 No malware corpora are bundled.

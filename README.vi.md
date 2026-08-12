@@ -112,6 +112,7 @@ Toàn bộ `samples/` có trong kho, gồm:
 | `net_demo.glk` / `async_demo.glk` | Mạng / async |
 | `pack_hello.glk` | Đóng gói EXE |
 | `upx_unpack.glk` | UPX (thuần Go) |
+| `vmp_assist.glk` | VMP phát hiện / extract / sửa dump |
 
 Một số demo cần bạn truyền **đường dẫn binary của riêng bạn** sau `--`.  
 Kho **không** đính kèm corpus malware.
